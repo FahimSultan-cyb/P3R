@@ -5,8 +5,8 @@ def download_models():
     os.makedirs("models", exist_ok=True)
     
     model_urls = {
-        "models/p3r_headgate_model1.pth": "https://drive.google.com/file/d/YOUR_MODEL_ID1/view?usp=sharing",
-        "models/symbolic_classifier1n.pth": "https://drive.google.com/file/d/YOUR_MODEL_ID2/view?usp=sharing"
+        "models/p3r_headgate_model1.pth": "https://drive.google.com/file/d/13LsTKLdgaxb_pkeq8BdZCKmqIBYnAgIP/view?usp=drive_link",
+        "models/symbolic_classifier1n.pth": "https://drive.google.com/file/d/1dz2pLTQgXS7c8HyjyKlaSIB01DZBw3GN/view?usp=drive_link"
     }
     
     print("Downloading pre-trained models...")
@@ -30,4 +30,5 @@ def download_models():
     print("\nModel download completed!")
 
 if __name__ == "__main__":
+
     download_models()
