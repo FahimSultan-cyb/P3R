@@ -1,11 +1,21 @@
+#!/usr/bin/env python3
+
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Add the parent directory to Python path to enable src imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
+sys.path.insert(0, parent_dir)
 
 import argparse
 import torch
 import pandas as pd
 from torch.utils.data import DataLoader
+import warnings
+warnings.filterwarnings("ignore")
+
+# Now import from src modules
 from src.models.p3r_model import P3RHeadGateModel
 from src.data.dataset import CodeDataset, create_collate_fn
 from src.evaluation.metrics import calculate_comprehensive_metrics, print_metrics_summary
@@ -23,6 +33,7 @@ def main():
     
     args = parser.parse_args()
     
+    # Device selection
     if args.device == 'auto':
         if torch.cuda.is_available():
             device = torch.device('cuda')
@@ -35,93 +46,152 @@ def main():
     
     print(f"Using device: {device}")
     
+    # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
+    # Load test data
     print("Loading test dataset...")
+    if not os.path.exists(args.test_data):
+        raise FileNotFoundError(f"Test data file not found: {args.test_data}")
+    
     test_df = pd.read_csv(args.test_data)
     print(f"Test samples: {len(test_df)}")
     print(f"Label distribution:\n{test_df['label'].value_counts()}")
     
+    # Initialize model
     print("\nInitializing model...")
-    model = P3RHeadGateModel().to(device)
+    try:
+        model = P3RHeadGateModel().to(device)
+    except Exception as e:
+        print(f"Error initializing model: {e}")
+        return
     
+    # Load trained weights
     print("Loading trained weights...")
-    checkpoint = torch.load(args.model_path, map_location=device)
-    model.load_state_dict(checkpoint, strict=False)
+    if not os.path.exists(args.model_path):
+        print(f"Warning: Model file not found at {args.model_path}")
+        print("Please run: python scripts/download_models.py")
+        return
     
+    try:
+        checkpoint = torch.load(args.model_path, map_location=device)
+        if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['state_dict'], strict=False)
+        else:
+            model.load_state_dict(checkpoint, strict=False)
+        print("Model weights loaded successfully")
+    except Exception as e:
+        print(f"Error loading model weights: {e}")
+        return
+    
+    # Model info
     trainable_params, total_params = model.count_parameters()
     print(f"Trainable: {trainable_params:,} | Total: {total_params:,}")
     print(f"Efficiency: {trainable_params/total_params:.1%}")
     
+    # Prepare data
     collate_fn = create_collate_fn(model.tokenizer)
     test_dataset = CodeDataset(test_df, model.tokenizer)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, 
                             shuffle=False, collate_fn=collate_fn)
     
+    # Run inference
     print("\nRunning inference...")
     model.eval()
     all_preds = []
     all_labels = []
     all_probs = []
     
-    with torch.no_grad():
-        for batch in test_loader:
-            chunks = batch['chunks'].to(device)
-            full_code = batch['full_code'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
-            
-            logits = model(chunks, full_code, attention_mask)
-            probs = torch.softmax(logits, dim=1)
-            _, predicted = torch.max(logits, 1)
-            
-            all_preds.extend(predicted.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-            all_probs.extend(probs[:, 1].cpu().numpy())
+    try:
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(test_loader):
+                if batch_idx % 10 == 0:
+                    print(f"Processing batch {batch_idx+1}/{len(test_loader)}")
+                
+                chunks = batch['chunks'].to(device)
+                full_code = batch['full_code'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['label'].to(device)
+                
+                logits = model(chunks, full_code, attention_mask)
+                probs = torch.softmax(logits, dim=1)
+                _, predicted = torch.max(logits, 1)
+                
+                all_preds.extend(predicted.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+                all_probs.extend(probs[:, 1].cpu().numpy())
     
+    except Exception as e:
+        print(f"Error during inference: {e}")
+        return
+    
+    # Calculate metrics
     print("\nCalculating metrics...")
     metrics = calculate_comprehensive_metrics(all_labels, all_preds, all_probs)
     
+    # Space mission evaluation
     print("\nRunning space mission evaluation...")
-    mission_eval = SpaceMissionEvaluator()
-    ksp_sim = KSPMissionSimulator()
+    try:
+        mission_eval = SpaceMissionEvaluator()
+        ksp_sim = KSPMissionSimulator()
+        
+        mission_profiles = mission_eval.generate_mission_profile(len(test_df))
+        dit_scores = mission_eval.calculate_dit_scores(mission_profiles)
+        
+        ksp_sim.run_simulation()
+        ksp_impact = ksp_sim.analyze_impact()
+        
+        # Add space metrics
+        dit_values = [score['overall_score'] for score in dit_scores]
+        metrics['space_dit_score'] = sum(dit_values) / len(dit_values)
+        metrics['ksp_orbital_efficiency'] = ksp_impact['orbital_efficiency']
+        metrics['ksp_fuel_efficiency'] = ksp_impact['fuel_efficiency']
+        metrics['ksp_thermal_stability'] = ksp_impact['thermal_stability']
+        
+    except Exception as e:
+        print(f"Warning: Space metrics evaluation failed: {e}")
     
-    mission_profiles = mission_eval.generate_mission_profile(len(test_df))
-    dit_scores = mission_eval.calculate_dit_scores(mission_profiles)
-    
-    ksp_sim.run_simulation()
-    ksp_impact = ksp_sim.analyze_impact()
-    
-    dit_values = [score['overall_score'] for score in dit_scores]
-    metrics['space_dit_score'] = sum(dit_values) / len(dit_values)
-    metrics['ksp_orbital_efficiency'] = ksp_impact['orbital_efficiency']
-    metrics['ksp_fuel_efficiency'] = ksp_impact['fuel_efficiency']
-    
+    # Print results
     print("\n=== INFERENCE RESULTS ===")
     print_metrics_summary(metrics)
     
+    # Export KSP data and create dashboard
     print("\nExporting results...")
-    ksp_csv_path = ksp_sim.export_data(args.output_dir)
+    try:
+        ksp_csv_path = ksp_sim.export_data(args.output_dir)
+        
+        if ksp_csv_path and os.path.exists(ksp_csv_path):
+            print("Creating mission dashboard...")
+            dashboard_path = os.path.join(args.output_dir, "mission_dashboard.png")
+            create_ksp_dashboard(ksp_csv_path, dashboard_path)
+            print(f"Dashboard saved: {dashboard_path}")
+        
+    except Exception as e:
+        print(f"Warning: Dashboard creation failed: {e}")
     
-    if ksp_csv_path:
-        print("Creating mission dashboard...")
-        dashboard_path = os.path.join(args.output_dir, "mission_dashboard.png")
-        create_ksp_dashboard(ksp_csv_path, dashboard_path)
-        print(f"Dashboard saved: {dashboard_path}")
-    
+    # Save results summary
     results_summary = {
         'test_samples': len(test_df),
-        'accuracy': metrics['acc'],
-        'f1_score': metrics['f1'],
-        'space_dit_score': metrics['space_dit_score'],
-        'ksp_orbital_efficiency': metrics['ksp_orbital_efficiency'],
-        'parameter_efficiency': f"{trainable_params/total_params:.1%}"
+        'accuracy': float(metrics['acc']),
+        'f1_score': float(metrics['f1']),
+        'precision': float(metrics['prec']),
+        'recall': float(metrics['rec']),
+        'roc_auc': float(metrics['roc_auc']),
+        'space_dit_score': float(metrics.get('space_dit_score', 0)),
+        'ksp_orbital_efficiency': float(metrics.get('ksp_orbital_efficiency', 0)),
+        'parameter_efficiency': f"{trainable_params/total_params:.1%}",
+        'trainable_parameters': trainable_params,
+        'total_parameters': total_params
     }
     
     summary_path = os.path.join(args.output_dir, "inference_summary.json")
-    import json
-    with open(summary_path, 'w') as f:
-        json.dump(results_summary, f, indent=2)
+    try:
+        import json
+        with open(summary_path, 'w') as f:
+            json.dump(results_summary, f, indent=2)
+        print(f"Summary saved: {summary_path}")
+    except Exception as e:
+        print(f"Warning: Could not save summary: {e}")
     
     print(f"\nResults exported to: {args.output_dir}")
     print("Inference completed successfully!")
