@@ -1,12 +1,20 @@
+#!/usr/bin/env python3
+
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Add the parent directory to Python path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
+sys.path.insert(0, parent_dir)
 
 import argparse
 import torch
 import pandas as pd
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import warnings
+warnings.filterwarnings("ignore")
 
 from src.models.p3r_model import P3RHeadGateModel
 from src.data.dataset import CodeDataset, create_collate_fn
