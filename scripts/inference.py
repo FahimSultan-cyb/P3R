@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Now import from src modules
-from src.models.p3r_model import P3RHeadGateModel
+from src.models import P3RHeadGateModel
 from src.data.dataset import CodeDataset, create_collate_fn
 from src.evaluation.metrics import calculate_comprehensive_metrics, print_metrics_summary
 from src.evaluation.space_metrics import SpaceMissionEvaluator, KSPMissionSimulator
@@ -201,3 +201,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
