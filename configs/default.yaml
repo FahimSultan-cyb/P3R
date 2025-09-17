@@ -11,7 +11,7 @@ model:
 
 training:
   batch_size: 8
-  learning_rate: 2e-5
+  learning_rate: 0.00002
   epochs: 10
   warmup_steps: 100
   weight_decay: 0.01
@@ -28,4 +28,5 @@ paths:
   data_dir: "data/"
   output_dir: "outputs/"
   
+
 device: "auto"  # auto, cpu, cuda, mps
