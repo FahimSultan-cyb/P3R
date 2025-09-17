@@ -47,8 +47,12 @@ def train_model(config):
     train_loader = DataLoader(train_dataset, batch_size=config['training']['batch_size'],
                              shuffle=True, collate_fn=collate_fn)
     
-    optimizer = optim.AdamW(model.parameters(), lr=config['training']['learning_rate'],
-                           weight_decay=config['training']['weight_decay'])
+    optimizer = optim.AdamW(
+    model.parameters(),
+    lr=float(config['training']['learning_rate']),
+    weight_decay=float(config['training']['weight_decay'])
+)
+
     criterion = nn.CrossEntropyLoss()
     
     print(f"Starting training for {config['training']['epochs']} epochs...")
@@ -125,4 +129,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
