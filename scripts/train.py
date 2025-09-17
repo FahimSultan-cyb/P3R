@@ -19,7 +19,7 @@ from tqdm import tqdm
 import warnings
 warnings.filterwarnings("ignore")
 
-from src.models.p3r_model import P3RHeadGateModel
+from src.models.p3r_headgate import P3RHeadGateModel
 from src.data.dataset import CodeDataset, create_collate_fn
 
 def train_model(config):
@@ -125,3 +125,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
