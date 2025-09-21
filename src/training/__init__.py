@@ -13,3 +13,8 @@ __all__ = [
     'Stage2Trainer',
     'CompactSymbolicClassifier'
 ]
+
+from .stage1_trainer import Stage1Trainer, CompactSymbolicClassifier
+from .stage2_trainer import Stage2Trainer
+
+__all__ = ['Stage1Trainer', 'CompactSymbolicClassifier', 'Stage2Trainer']
