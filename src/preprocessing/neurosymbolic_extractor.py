@@ -247,39 +247,26 @@ class NeurosymbolicFeatureExtractor:
         
         return list(set(all_features))
 
-    def process_dataset(input_csv, output_csv: str) -> pd.DataFrame:
-        extractor = NeurosymbolicFeatureExtractor()
-
-    # Accept both CSV path and DataFrame
-        if isinstance(input_csv, str):
-            df = pd.read_csv(input_csv)
-        elif isinstance(input_csv, pd.DataFrame):
-            df = input_csv.copy()
-        else:
-            raise ValueError(f"Expected str (file path) or pd.DataFrame, got {type(input_csv)}")
-
-        if 'func' not in df.columns or 'label' not in df.columns:
-            raise ValueError("Dataset must contain 'func' and 'label' columns")
-
-        print(f"Processing {len(df)} samples...")
-
-        neurosymbolic_features = []
-        for idx, row in df.iterrows():
-            if idx % 100 == 0:
-                print(f"Processed {idx}/{len(df)} samples")
-
-            code = str(row['func'])
-            features = extractor.extract_all_features(code)
-            neurosymbolic_features.append(str(features))
-
-        df['neuro'] = neurosymbolic_features
-
-        df.to_csv(output_csv, index=False)
-        print(f"Saved processed dataset to {output_csv}")
-
-        return df
-
-
-
-
-
+def process_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
+    extractor = NeurosymbolicFeatureExtractor()
+    df = pd.read_csv(input_csv)
+    
+    if 'func' not in df.columns or 'label' not in df.columns:
+        raise ValueError("Dataset must contain 'func' and 'label' columns")
+    
+    print(f"Processing {len(df)} samples...")
+    
+    neurosymbolic_features = []
+    for idx, row in df.iterrows():
+        if idx % 100 == 0:
+            print(f"Processed {idx}/{len(df)} samples")
+        
+        code = str(row['func'])
+        features = extractor.extract_all_features(code)
+        neurosymbolic_features.append(str(features))
+    
+    df['neuro'] = neurosymbolic_features
+    df.to_csv(output_csv, index=False)
+    
+    print(f"Saved processed dataset to {output_csv}")
+    return df
