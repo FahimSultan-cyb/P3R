@@ -1,0 +1,18 @@
+
+model:
+  name: "microsoft/graphcodebert-base"
+  num_prompts: 6
+  prompt_length: 12
+
+training:
+  stage2:
+    epochs: 20
+            learning_rate: 5e-6
+    batch_size: 12
+
+preprocessing:
+  clean_code: true
+  extract_neurosymbolic: true
+
+paths:
+  output_dir: "custom_results/"
