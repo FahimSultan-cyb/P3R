@@ -1,0 +1,53 @@
+model:
+  name: "microsoft/codebert-base"  # Can be any CodePTM
+  num_prompts: 4
+  prompt_length: 8
+  num_classes: 2
+  max_length: 512
+  chunk_size: 512
+  stride: 256
+
+training:
+  stage1:
+    max_features: 5000
+    ngram_range: [1, 3]
+    random_state: 42
+    max_iter: 1000
+  
+  stage2:
+    batch_size: 8
+    learning_rate: 2e-5
+    epochs: 10
+    weight_decay: 0.01
+    warmup_steps: 100
+
+evaluation:
+  batch_size: 8
+  metrics: ["accuracy", "f1", "precision", "recall", "roc_auc"]
+  space_metrics: true
+  ksp_simulation: true
+
+preprocessing:
+  clean_code: true
+  extract_neurosymbolic: true
+  remove_comments: true
+  remove_empty_lines: true
+
+paths:
+  model_dir: "models/"
+  data_dir: "data/"
+  output_dir: "results/"
+
+supported_models:
+  - "microsoft/codebert-base"
+  - "microsoft/graphcodebert-base"
+  - "microsoft/unixcoder-base"
+  - "microsoft/codebert-base-mlm"
+  - "huggingface/CodeBERTa-small-v1"
+  - "microsoft/DialoGPT-medium"
+  - "Salesforce/codet5-small"
+  - "microsoft/codereviewer"
+  - "facebook/incoder-1B"
+  - "codeparrot/codeparrot-small"
+
+device: "auto"
