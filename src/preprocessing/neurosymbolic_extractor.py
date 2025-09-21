@@ -247,9 +247,9 @@ class NeurosymbolicFeatureExtractor:
         
         return list(set(all_features))
 
-    def process_dataset(input_csv, output_csv: str) -> pd.DataFrame:
+    def process_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
         extractor = NeurosymbolicFeatureExtractor()
-        df = input_csv if isinstance(input_csv, pd.DataFrame) else pd.read_csv(input_csv)
+        df = pd.read_csv(input_csv)
     
 
     
