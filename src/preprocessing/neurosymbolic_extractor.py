@@ -247,9 +247,11 @@ class NeurosymbolicFeatureExtractor:
         
         return list(set(all_features))
 
-def process_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
+def process_dataset(input_csv, output_csv: str) -> pd.DataFrame:
     extractor = NeurosymbolicFeatureExtractor()
-    df = pd.read_csv(input_csv)
+    df = input_csv if isinstance(input_csv, pd.DataFrame) else pd.read_csv(input_csv)
+    
+
     
     if 'func' not in df.columns or 'label' not in df.columns:
         raise ValueError("Dataset must contain 'func' and 'label' columns")
@@ -270,3 +272,4 @@ def process_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
     
     print(f"Saved processed dataset to {output_csv}")
     return df
+
