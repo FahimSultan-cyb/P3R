@@ -249,7 +249,7 @@ class NeurosymbolicFeatureExtractor:
 
     def process_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
         extractor = NeurosymbolicFeatureExtractor()
-        df = pd.read_csv(input_csv)
+        df = input_csv
     
 
     
@@ -272,5 +272,6 @@ class NeurosymbolicFeatureExtractor:
     
         print(f"Saved processed dataset to {output_csv}")
         return df
+
 
 
