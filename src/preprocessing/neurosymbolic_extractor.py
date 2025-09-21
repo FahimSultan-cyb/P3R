@@ -247,29 +247,30 @@ class NeurosymbolicFeatureExtractor:
         
         return list(set(all_features))
 
-def process_dataset(input_csv, output_csv: str) -> pd.DataFrame:
-    extractor = NeurosymbolicFeatureExtractor()
-    df = input_csv if isinstance(input_csv, pd.DataFrame) else pd.read_csv(input_csv)
+    def process_dataset(input_csv, output_csv: str) -> pd.DataFrame:
+        extractor = NeurosymbolicFeatureExtractor()
+        df = input_csv if isinstance(input_csv, pd.DataFrame) else pd.read_csv(input_csv)
     
 
     
-    if 'func' not in df.columns or 'label' not in df.columns:
-        raise ValueError("Dataset must contain 'func' and 'label' columns")
+        if 'func' not in df.columns or 'label' not in df.columns:
+            raise ValueError("Dataset must contain 'func' and 'label' columns")
     
-    print(f"Processing {len(df)} samples...")
+        print(f"Processing {len(df)} samples...")
     
-    neurosymbolic_features = []
-    for idx, row in df.iterrows():
-        if idx % 100 == 0:
-            print(f"Processed {idx}/{len(df)} samples")
+        neurosymbolic_features = []
+        for idx, row in df.iterrows():
+            if idx % 100 == 0:
+                print(f"Processed {idx}/{len(df)} samples")
         
-        code = str(row['func'])
-        features = extractor.extract_all_features(code)
-        neurosymbolic_features.append(str(features))
+            code = str(row['func'])
+            features = extractor.extract_all_features(code)
+            neurosymbolic_features.append(str(features))
     
-    df['neuro'] = neurosymbolic_features
-    df.to_csv(output_csv, index=False)
+        df['neuro'] = neurosymbolic_features
+        df.to_csv(output_csv, index=False)
     
-    print(f"Saved processed dataset to {output_csv}")
-    return df
+        print(f"Saved processed dataset to {output_csv}")
+        return df
+
 
