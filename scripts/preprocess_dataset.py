@@ -37,7 +37,7 @@ def main():
     if args.func_column != 'func':
         df = df.rename(columns={args.func_column: 'func'})
     
-    processed_df = extractor.process_dataset(args.input_csv, args.output_csv)
+    processed_df = extractor.process_dataset(df)
     
     print(f"Generated neurosymbolic features for {len(processed_df)} samples")
     print(f"Sample feature length: {len(eval(processed_df['neuro'].iloc[0]))}")
@@ -48,3 +48,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
