@@ -1,194 +1,193 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-import os
-from tqdm import tqdm
-from sklearn.metrics import accuracy_score, f1_score
+from transformers import AutoTokenizer, AutoModel
+from .components import CompactPromptPool, CompactRouterMLP, CompactHeadGate
 
-class TwoStageTrainer:
-    def __init__(self, model, device='cuda', learning_rate=2e-5, weight_decay=0.01):
-        self.model = model
-        self.device = device
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.criterion = nn.CrossEntropyLoss()
+class CompactSymbolicClassifier(nn.Module):
+    def __init__(self, embed_dim=768, num_classes=2):
+        super().__init__()
+        self.classifier = nn.Sequential(
+            nn.Linear(embed_dim, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, num_classes)
+        )
         
-    def train_stage1(self, train_loader, val_loader, epochs=10, save_path='models/'):
-        print("Starting Stage 1 Training: Neurosymbolic Features → Symbolic Classifier")
+    def forward(self, x):
+        return self.classifier(x)
+
+class UniversalP3RModel(nn.Module):
+    def __init__(self, model_name="microsoft/unixcoder-base", num_prompts=4, prompt_length=8, stage=1):
+        super().__init__()
+        self.model_name = model_name
+        self.stage = stage
         
-        self.model.set_stage(1)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.backbone = AutoModel.from_pretrained(model_name)
         
-        trainable_params = [p for p in self.model.parameters() if p.requires_grad]
-        print(f"Stage 1 trainable parameters: {sum(p.numel() for p in trainable_params):,}")
-        
-        if not trainable_params:
-            raise ValueError("No trainable parameters found for Stage 1")
-        
-        optimizer = optim.AdamW(trainable_params, lr=self.learning_rate, weight_decay=self.weight_decay)
-        
-        best_f1 = 0.0
-        os.makedirs(save_path, exist_ok=True)
-        
-        for epoch in range(epochs):
-            self.model.train()
-            total_loss = 0
-            all_preds = []
-            all_labels = []
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            progress_bar = tqdm(train_loader, desc=f'Stage1 Epoch {epoch+1}/{epochs}')
-            for batch in progress_bar:
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
-                
-                optimizer.zero_grad()
-                logits = self.model(input_ids, attention_mask)
-                loss = self.criterion(logits, labels)
-                
-                loss.backward()
-                optimizer.step()
-                
-                total_loss += loss.item()
-                _, predicted = torch.max(logits, 1)
-                all_preds.extend(predicted.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
-                
-                progress_bar.set_postfix({
-                    'loss': f'{loss.item():.4f}',
-                    'acc': f'{accuracy_score(all_labels, all_preds):.3f}'
-                })
+        for param in self.backbone.parameters():
+            param.requires_grad = False
             
-            avg_loss = total_loss / len(train_loader)
-            train_acc = accuracy_score(all_labels, all_preds)
-            train_f1 = f1_score(all_labels, all_preds, zero_division=0)
-            
-            val_acc, val_f1, val_loss = self.evaluate_stage1(val_loader)
-            
-            print(f'Epoch {epoch+1}: Train Loss: {avg_loss:.4f}, Train Acc: {train_acc:.3f}, Train F1: {train_f1:.3f}')
-            print(f'Val Acc: {val_acc:.3f}, Val F1: {val_f1:.3f}, Val Loss: {val_loss:.4f}')
-            
-            if val_f1 > best_f1:
-                best_f1 = val_f1
-                classifier_path = os.path.join(save_path, 'stage1_classifier.pth')
-                torch.save(self.model.symbolic_classifier.state_dict(), classifier_path)
-                print(f'Stage 1 classifier saved: {classifier_path}')
+        self.embed_dim = self.backbone.config.hidden_size
         
-        return classifier_path
+        if hasattr(self.backbone.config, 'num_hidden_layers'):
+            self.num_layers = self.backbone.config.num_hidden_layers
+        elif hasattr(self.backbone.config, 'n_layer'):
+            self.num_layers = self.backbone.config.n_layer
+        else:
+            self.num_layers = 12
+            
+        if hasattr(self.backbone.config, 'num_attention_heads'):
+            self.num_heads = self.backbone.config.num_attention_heads
+        elif hasattr(self.backbone.config, 'n_head'):
+            self.num_heads = self.backbone.config.n_head
+        else:
+            self.num_heads = 12
+        
+        self.symbolic_classifier = CompactSymbolicClassifier(self.embed_dim, 2)
+        
+        self.prompt_pool = CompactPromptPool(num_prompts, prompt_length, self.embed_dim)
+        self.router = CompactRouterMLP(self.embed_dim, num_prompts)
+        self.head_gate = CompactHeadGate(self.num_layers, self.num_heads)
+        
+        self.apply_head_gate = False
+        self.hook_handles = []
+        
+        self._set_stage_parameters()
     
-    def train_stage2(self, train_loader, val_loader, classifier_path, epochs=10, save_path='models/'):
-        print("Starting Stage 2 Training: Raw Code → P3R → Frozen Classifier")
-        
-        self.model.set_stage(2)
-        self.model.load_stage1_classifier(classifier_path)
-        
-        trainable_params = [p for p in self.model.parameters() if p.requires_grad]
-        print(f"Stage 2 trainable parameters: {sum(p.numel() for p in trainable_params):,}")
-        
-        if not trainable_params:
-            raise ValueError("No trainable parameters found for Stage 2")
-        
-        optimizer = optim.AdamW(trainable_params, lr=self.learning_rate, weight_decay=self.weight_decay)
-        
-        best_f1 = 0.0
-        os.makedirs(save_path, exist_ok=True)
-        
-        for epoch in range(epochs):
-            self.model.train()
-            total_loss = 0
-            all_preds = []
-            all_labels = []
-            
-            progress_bar = tqdm(train_loader, desc=f'Stage2 Epoch {epoch+1}/{epochs}')
-            for batch in progress_bar:
-                chunks = batch['chunks'].to(self.device)
-                full_code = batch['full_code'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
-                
-                optimizer.zero_grad()
-                logits = self.model(chunks, full_code, attention_mask)
-                loss = self.criterion(logits, labels)
-                
-                loss.backward()
-                optimizer.step()
-                
-                total_loss += loss.item()
-                _, predicted = torch.max(logits, 1)
-                all_preds.extend(predicted.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
-                
-                progress_bar.set_postfix({
-                    'loss': f'{loss.item():.4f}',
-                    'acc': f'{accuracy_score(all_labels, all_preds):.3f}'
-                })
-            
-            avg_loss = total_loss / len(train_loader)
-            train_acc = accuracy_score(all_labels, all_preds)
-            train_f1 = f1_score(all_labels, all_preds, zero_division=0)
-            
-            val_acc, val_f1, val_loss = self.evaluate_stage2(val_loader)
-            
-            print(f'Epoch {epoch+1}: Train Loss: {avg_loss:.4f}, Train Acc: {train_acc:.3f}, Train F1: {train_f1:.3f}')
-            print(f'Val Acc: {val_acc:.3f}, Val F1: {val_f1:.3f}, Val Loss: {val_loss:.4f}')
-            
-            if val_f1 > best_f1:
-                best_f1 = val_f1
-                model_path = os.path.join(save_path, 'stage2_p3r_model.pth')
-                torch.save(self.model.state_dict(), model_path)
-                print(f'Stage 2 P3R model saved: {model_path}')
-        
-        return model_path
+    def _set_stage_parameters(self):
+        if self.stage == 1:
+            for param in self.symbolic_classifier.parameters():
+                param.requires_grad = True
+            for param in self.prompt_pool.parameters():
+                param.requires_grad = False
+            for param in self.router.parameters():
+                param.requires_grad = False
+            for param in self.head_gate.parameters():
+                param.requires_grad = False
+        elif self.stage == 2:
+            for param in self.symbolic_classifier.parameters():
+                param.requires_grad = False
+            for param in self.prompt_pool.parameters():
+                param.requires_grad = True
+            for param in self.router.parameters():
+                param.requires_grad = True
+            for param in self.head_gate.parameters():
+                param.requires_grad = True
+            self.apply_head_gate = True
+            self._register_hooks()
     
-    def evaluate_stage1(self, val_loader):
-        self.model.eval()
-        total_loss = 0
-        all_preds = []
-        all_labels = []
+    def set_stage(self, stage):
+        self.stage = stage
+        if hasattr(self, 'hook_handles'):
+            for handle in self.hook_handles:
+                handle.remove()
+            self.hook_handles = []
+        self._set_stage_parameters()
+    
+    def _register_hooks(self):
+        def create_hook(layer_idx):
+            def hook(module, input, output):
+                if not self.apply_head_gate:
+                    return output
+                if isinstance(output, tuple) and len(output) > 0:
+                    gated = self.head_gate.apply_gate(output[0], layer_idx)
+                    return (gated,) + output[1:]
+                else:
+                    return self.head_gate.apply_gate(output, layer_idx)
+            return hook
+            
+        if hasattr(self.backbone, 'encoder') and hasattr(self.backbone.encoder, 'layer'):
+            for i, layer in enumerate(self.backbone.encoder.layer):
+                if hasattr(layer, 'attention') and hasattr(layer.attention, 'self'):
+                    handle = layer.attention.self.register_forward_hook(create_hook(i))
+                    self.hook_handles.append(handle)
+        elif hasattr(self.backbone, 'h'):
+            for i, layer in enumerate(self.backbone.h):
+                if hasattr(layer, 'attn'):
+                    handle = layer.attn.register_forward_hook(create_hook(i))
+                    self.hook_handles.append(handle)
+    
+    def get_backbone_embeddings(self, input_ids, attention_mask):
+        outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
+        if hasattr(outputs, 'last_hidden_state'):
+            embeddings = outputs.last_hidden_state
+        elif hasattr(outputs, 'hidden_states'):
+            embeddings = outputs.hidden_states[-1]
+        else:
+            embeddings = outputs[0]
+        return embeddings.mean(dim=1)
+    
+    def get_chunk_embeddings(self, chunks):
+        batch_size, num_chunks, chunk_size = chunks.shape
+        chunks_flat = chunks.view(-1, chunk_size)
+        attention_mask = (chunks_flat != self.tokenizer.pad_token_id).long()
         
+        old_gate_state = self.apply_head_gate
+        self.apply_head_gate = False
         with torch.no_grad():
-            for batch in val_loader:
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
-                
-                logits = self.model(input_ids, attention_mask)
-                loss = self.criterion(logits, labels)
-                
-                total_loss += loss.item()
-                _, predicted = torch.max(logits, 1)
-                all_preds.extend(predicted.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
+            chunk_embeddings = self.get_backbone_embeddings(chunks_flat, attention_mask)
+        self.apply_head_gate = old_gate_state
         
-        avg_loss = total_loss / len(val_loader)
-        accuracy = accuracy_score(all_labels, all_preds)
-        f1 = f1_score(all_labels, all_preds, zero_division=0)
-        
-        return accuracy, f1, avg_loss
+        chunk_embeddings = chunk_embeddings.view(batch_size, num_chunks, -1)
+        return torch.mean(chunk_embeddings, dim=1)
     
-    def evaluate_stage2(self, val_loader):
-        self.model.eval()
-        total_loss = 0
-        all_preds = []
-        all_labels = []
+    def forward_stage1(self, input_ids, attention_mask):
+        embeddings = self.get_backbone_embeddings(input_ids, attention_mask)
+        logits = self.symbolic_classifier(embeddings)
+        return logits
+    
+    def forward_stage2(self, chunks, full_code, attention_mask):
+        chunk_embeddings = self.get_chunk_embeddings(chunks)
+        prompt_weights = self.router(chunk_embeddings)
+        composite_prompt = self.prompt_pool(prompt_weights)
         
-        with torch.no_grad():
-            for batch in val_loader:
-                chunks = batch['chunks'].to(self.device)
-                full_code = batch['full_code'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
-                
-                logits = self.model(chunks, full_code, attention_mask)
-                loss = self.criterion(logits, labels)
-                
-                total_loss += loss.item()
-                _, predicted = torch.max(logits, 1)
-                all_preds.extend(predicted.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
+        full_code_attention = attention_mask
+        prompt_length = composite_prompt.size(1)
         
-        avg_loss = total_loss / len(val_loader)
-        accuracy = accuracy_score(all_labels, all_preds)
-        f1 = f1_score(all_labels, all_preds, zero_division=0)
+        if full_code.size(1) + prompt_length > 512:
+            truncate_length = 512 - prompt_length
+            full_code = full_code[:, :truncate_length]
+            full_code_attention = full_code_attention[:, :truncate_length]
         
-        return accuracy, f1, avg_loss
+        if hasattr(self.backbone, 'embeddings'):
+            inputs_embeds = self.backbone.embeddings(full_code)
+        elif hasattr(self.backbone, 'wte'):
+            inputs_embeds = self.backbone.wte(full_code)
+        else:
+            inputs_embeds = self.backbone.get_input_embeddings()(full_code)
+        
+        combined_embeds = torch.cat([composite_prompt, inputs_embeds], dim=1)
+        
+        extended_attention_mask = torch.ones(attention_mask.size(0), prompt_length, 
+                                           device=attention_mask.device, dtype=attention_mask.dtype)
+        combined_attention_mask = torch.cat([extended_attention_mask, full_code_attention], dim=1)
+        
+        outputs = self.backbone(inputs_embeds=combined_embeds, attention_mask=combined_attention_mask)
+        if hasattr(outputs, 'last_hidden_state'):
+            cls_embedding = outputs.last_hidden_state[:, 0, :]
+        else:
+            cls_embedding = outputs[0][:, 0, :]
+        
+        logits = self.symbolic_classifier(cls_embedding)
+        return logits
+    
+    def forward(self, *args, **kwargs):
+        if self.stage == 1:
+            return self.forward_stage1(*args, **kwargs)
+        else:
+            return self.forward_stage2(*args, **kwargs)
+    
+    def load_stage1_classifier(self, classifier_path):
+        classifier_state = torch.load(classifier_path, map_location='cpu')
+        self.symbolic_classifier.load_state_dict(classifier_state, strict=False)
+        for param in self.symbolic_classifier.parameters():
+            param.requires_grad = False
+    
+    def count_parameters(self):
+        trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in self.parameters())
+        return trainable, total
