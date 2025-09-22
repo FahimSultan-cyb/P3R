@@ -122,4 +122,61 @@ class TwoStageTrainer:
             
             if val_f1 > best_f1:
                 best_f1 = val_f1
-                model
+                model_path = os.path.join(save_path, 'stage2_p3r_model.pth')
+                torch.save(self.model.state_dict(), model_path)
+                print(f'Stage 2 P3R model saved: {model_path}')
+        
+        return model_path
+    
+    def evaluate_stage1(self, val_loader):
+        self.model.eval()
+        total_loss = 0
+        all_preds = []
+        all_labels = []
+        
+        with torch.no_grad():
+            for batch in val_loader:
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['label'].to(self.device)
+                
+                logits = self.model(input_ids, attention_mask)
+                loss = self.criterion(logits, labels)
+                
+                total_loss += loss.item()
+                _, predicted = torch.max(logits, 1)
+                all_preds.extend(predicted.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+        
+        avg_loss = total_loss / len(val_loader)
+        accuracy = accuracy_score(all_labels, all_preds)
+        f1 = f1_score(all_labels, all_preds)
+        
+        return accuracy, f1, avg_loss
+    
+    def evaluate_stage2(self, val_loader):
+        self.model.eval()
+        total_loss = 0
+        all_preds = []
+        all_labels = []
+        
+        with torch.no_grad():
+            for batch in val_loader:
+                chunks = batch['chunks'].to(self.device)
+                full_code = batch['full_code'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['label'].to(self.device)
+                
+                logits = self.model(chunks, full_code, attention_mask)
+                loss = self.criterion(logits, labels)
+                
+                total_loss += loss.item()
+                _, predicted = torch.max(logits, 1)
+                all_preds.extend(predicted.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+        
+        avg_loss = total_loss / len(val_loader)
+        accuracy = accuracy_score(all_labels, all_preds)
+        f1 = f1_score(all_labels, all_preds)
+        
+        return accuracy, f1, avg_loss
