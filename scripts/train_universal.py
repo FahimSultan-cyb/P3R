@@ -81,9 +81,6 @@ def main():
     print("\n" + "="*50)
     print("CORRECTED P3R TWO-STAGE TRAINING")
     print("="*50)
-    print("Stage 1: Frozen CodePTM → Embeddings → CompactSymbolicClassifier")
-    print("Stage 2: Frozen CodePTM + Frozen Classifier + P3R Components")
-    print("="*50)
     
     trainer = CorrectedTwoStageTrainer(args.model_name, device, args.output_dir)
     
@@ -117,4 +114,5 @@ def main():
         raise
 
 if __name__ == "__main__":
+
     main()
