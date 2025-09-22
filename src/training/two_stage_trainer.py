@@ -212,6 +212,8 @@ class TwoStageTrainer:
         
         best_f1 = 0.0
         os.makedirs(save_path, exist_ok=True)
+       
+        model_path = os.path.join(save_path, 'stage2_p3r_model.pth')  # define here
         
         for epoch in range(epochs):
             self.model.train()
@@ -375,3 +377,4 @@ class TwoStageTrainer:
         f1 = f1_score(all_labels, all_preds, zero_division=0)
         
         return accuracy, f1, avg_loss
+
