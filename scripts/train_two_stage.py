@@ -68,8 +68,8 @@ def main():
     trainer = TwoStageTrainer(
         model=model,
         device=device,
-        learning_rate=config['training']['learning_rate'],
-        weight_decay=config['training']['weight_decay']
+        learning_rate=float(config['training']['learning_rate']),
+        weight_decay=float(config['training']['weight_decay'])
     )
     
     os.makedirs(config['paths']['model_dir'], exist_ok=True)
