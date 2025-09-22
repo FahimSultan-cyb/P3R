@@ -30,12 +30,9 @@ __all__ = [
     'CompactSymbolicClassifier'
 ]
 
+from .universal_p3r import UniversalP3RModel, CompactSymbolicClassifier
 from .components import CompactPromptPool, CompactRouterMLP, CompactHeadGate
-from .p3r_stage2_model import P3RStage2Model
 
-__all__ = [
-    'CompactPromptPool', 
-    'CompactRouterMLP', 
-    'CompactHeadGate',
-    'P3RStage2Model'
-]
+__all__ = ['UniversalP3RModel', 'CompactSymbolicClassifier', 'CompactPromptPool', 'CompactRouterMLP', 'CompactHeadGate']
+
+
