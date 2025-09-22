@@ -1,0 +1,33 @@
+model:
+  name: "microsoft/unixcoder-base"  # Can be any CodeLLM: codebert-base, graphcodebert-base, etc.
+  num_prompts: 4
+  prompt_length: 8
+  embed_dim: 768
+  num_classes: 2
+  max_length: 512
+  chunk_size: 512
+  stride: 256
+
+training:
+  batch_size: 8
+  learning_rate: 2e-5
+  weight_decay: 0.01
+  stage1_epochs: 10
+  stage2_epochs: 15
+  
+evaluation:
+  batch_size: 8
+  metrics: ["accuracy", "f1", "precision", "recall", "roc_auc"]
+  space_metrics: true
+  ksp_simulation: true
+
+paths:
+  model_dir: "models/"
+  data_dir: "data/"
+  output_dir: "outputs/"
+
+preprocessing:
+  clean_code: true
+  extract_neurosymbolic: true
+  
+device: "auto"
