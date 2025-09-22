@@ -161,14 +161,14 @@ def preprocess_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
     
     print(f"Processing {len(df)} samples...")
     
-    df['func_cleaned'] = df['func'].apply(extractor.clean_code)
+    df['func'] = df['func'].apply(extractor.clean_code)
     
     neurosymbolic_features = []
     for idx, row in df.iterrows():
         if idx % 100 == 0:
             print(f"Processed {idx}/{len(df)} samples")
         
-        code = row['func_cleaned']
+        code = row['func']
         features = extractor.extract_all_features(code)
         neurosymbolic_features.append(str(features))
     
@@ -177,3 +177,4 @@ def preprocess_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
     
     print(f"Preprocessing completed. Output saved to: {output_csv}")
     return df
+
