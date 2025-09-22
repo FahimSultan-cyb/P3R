@@ -22,13 +22,13 @@ default_classifier_path = os.path.join(project_root, 'models', 'symbolic_classif
 default_output_dir = os.path.join(project_root, 'results')
 
 # Argument parser
-parser = argparse.ArgumentParser()
-parser.add_argument('--model_path', type=str, default=default_model_path, 
-                    help='Path to the model file')
-parser.add_argument('--classifier_path', type=str, default=default_classifier_path, 
-                    help='Path to the classifier file')
-parser.add_argument('--output_dir', type=str, default=default_output_dir, 
-                    help='Directory to save results')
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--model_path', type=str, default=default_model_path, 
+#                     help='Path to the model file')
+# parser.add_argument('--classifier_path', type=str, default=default_classifier_path, 
+#                     help='Path to the classifier file')
+# parser.add_argument('--output_dir', type=str, default=default_output_dir, 
+#                     help='Directory to save results')
 
 
 
@@ -231,5 +231,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
