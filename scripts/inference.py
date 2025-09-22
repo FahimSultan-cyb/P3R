@@ -3,11 +3,35 @@
 import sys
 import os
 
-# Ensure project root is in PYTHONPATH so `src` can be imported reliably
+
 script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(script_dir, os.pardir))  # one level up
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir)) 
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+
+
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Default dynamic paths
+default_model_path = os.path.join(project_root, 'models', 'p3r_headgate_model1.pth')
+default_classifier_path = os.path.join(project_root, 'models', 'symbolic_classifier1n.pth')
+default_output_dir = os.path.join(project_root, 'results')
+
+# Argument parser
+parser = argparse.ArgumentParser()
+parser.add_argument('--model_path', type=str, default=default_model_path, 
+                    help='Path to the model file')
+parser.add_argument('--classifier_path', type=str, default=default_classifier_path, 
+                    help='Path to the classifier file')
+parser.add_argument('--output_dir', type=str, default=default_output_dir, 
+                    help='Directory to save results')
+
+
+
 
 import argparse
 import torch
@@ -16,7 +40,7 @@ from torch.utils.data import DataLoader
 import warnings
 warnings.filterwarnings("ignore")
 
-# Now import from src modules
+
 from src.models import P3RHeadGateModel
 from src.data.dataset import CodeDataset, create_collate_fn
 from src.evaluation.metrics import calculate_comprehensive_metrics, print_metrics_summary
@@ -27,9 +51,15 @@ from src.visualization.dashboard import create_ksp_dashboard
 def main():
     parser = argparse.ArgumentParser(description='P3R Model Inference')
     parser.add_argument('--test_data', type=str, required=True, help='Path to test CSV file')
-    parser.add_argument('--model_path', type=str, default='/content/models/p3r_headgate_model1.pth')
-    parser.add_argument('--classifier_path', type=str, default='/content/models/symbolic_classifier1n.pth')
-    parser.add_argument('--output_dir', type=str, default='/content/results/')
+    # parser.add_argument('--model_path', type=str, default='/content/models/p3r_headgate_model1.pth')
+    # parser.add_argument('--classifier_path', type=str, default='/content/models/symbolic_classifier1n.pth')
+    # parser.add_argument('--output_dir', type=str, default='/content/results/')
+    parser.add_argument('--model_path', type=str, default=default_model_path, 
+                    help='Path to the model file')
+    parser.add_argument('--classifier_path', type=str, default=default_classifier_path, 
+                    help='Path to the classifier file')
+    parser.add_argument('--output_dir', type=str, default=default_output_dir, 
+                    help='Directory to save results')
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--device', type=str, default='auto')
     
@@ -201,4 +231,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
