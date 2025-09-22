@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-import sys
 import os
+import argparse
+import sys
 
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -11,24 +12,19 @@ if project_root not in sys.path:
 
 
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+if os.path.exists('/content/models'):
+    root_dir = '/content'
+elif os.path.exists('/root/models'):
+    root_dir = '/root'
+else:
+    # fallback to current working directory
+    root_dir = os.getcwd()
 
-# Default dynamic paths
-default_model_path = os.path.join(project_root, 'models', 'p3r_headgate_model1.pth')
-default_classifier_path = os.path.join(project_root, 'models', 'symbolic_classifier1n.pth')
-default_output_dir = os.path.join(project_root, 'results')
+# Build dynamic paths
+default_model_path = os.path.join(root_dir, 'models', 'p3r_headgate_model1.pth')
+default_classifier_path = os.path.join(root_dir, 'models', 'symbolic_classifier1n.pth')
 
-# Argument parser
-# parser = argparse.ArgumentParser()
-# parser.add_argument('--model_path', type=str, default=default_model_path, 
-#                     help='Path to the model file')
-# parser.add_argument('--classifier_path', type=str, default=default_classifier_path, 
-#                     help='Path to the classifier file')
-# parser.add_argument('--output_dir', type=str, default=default_output_dir, 
-#                     help='Directory to save results')
+
 
 
 
@@ -53,13 +49,12 @@ def main():
     parser.add_argument('--test_data', type=str, required=True, help='Path to test CSV file')
     # parser.add_argument('--model_path', type=str, default='/content/models/p3r_headgate_model1.pth')
     # parser.add_argument('--classifier_path', type=str, default='/content/models/symbolic_classifier1n.pth')
-    # parser.add_argument('--output_dir', type=str, default='/content/results/')
+    
     parser.add_argument('--model_path', type=str, default=default_model_path, 
                     help='Path to the model file')
     parser.add_argument('--classifier_path', type=str, default=default_classifier_path, 
                     help='Path to the classifier file')
-    parser.add_argument('--output_dir', type=str, default=default_output_dir, 
-                    help='Directory to save results')
+    parser.add_argument('--output_dir', type=str, default='/content/results/')
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--device', type=str, default='auto')
     
@@ -231,6 +226,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
