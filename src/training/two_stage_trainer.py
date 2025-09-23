@@ -189,6 +189,50 @@ import os
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score
 
+from torch.utils.data import Dataset, DataLoader
+from transformers import AutoTokenizer
+
+class CodeDataset(Dataset):
+    def __init__(self, csv_file, tokenizer, max_length=512, chunk_size=512, stride=256, code_col='func', label_col='target'):
+        self.data = pd.read_csv(csv_file)
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.chunk_size = chunk_size
+        self.stride = stride
+        self.code_col = code_col
+        self.label_col = label_col
+        
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        code = str(self.data.iloc[idx][self.code_col])
+        label = int(self.data.iloc[idx][self.label_col])
+        
+        tokens = self.tokenizer.encode(code, add_special_tokens=False, max_length=self.max_length, truncation=True)
+        
+        chunks = []
+        if len(tokens) <= self.chunk_size:
+            chunk_padded = tokens + [self.tokenizer.pad_token_id] * (self.chunk_size - len(tokens))
+            chunks.append(chunk_padded)
+        else:
+            for i in range(0, len(tokens), self.stride):
+                chunk = tokens[i:i + self.chunk_size]
+                if len(chunk) < 50:
+                    break
+                if len(chunk) < self.chunk_size:
+                    chunk = chunk + [self.tokenizer.pad_token_id] * (self.chunk_size - len(chunk))
+                chunks.append(chunk)
+        
+        full_tokens = tokens + [self.tokenizer.pad_token_id] * (self.max_length - len(tokens))
+        
+        return {
+            'chunks': torch.tensor(chunks, dtype=torch.long),
+            'full_code': torch.tensor(full_tokens[:self.max_length], dtype=torch.long),
+            'label': torch.tensor(label, dtype=torch.long),
+            'attention_mask': torch.tensor([1 if t != self.tokenizer.pad_token_id else 0 for t in full_tokens[:self.max_length]], dtype=torch.long)
+        }
+
 class TwoStageTrainer:
     def __init__(self, model, device='cuda', learning_rate=2e-5, weight_decay=0.01):
         self.model = model
@@ -379,14 +423,23 @@ class TwoStageTrainer:
         
         return accuracy, f1, avg_loss
 
-    def train_full_pipeline(trainer, model, train_loader, val_loader, epochs_stage1=10, epochs_stage2=10, save_path="models/"):
+    def train_full_pipeline(self, train_csv, val_csv, epochs_stage1=10, epochs_stage2=10, save_path="models/",
+                            batch_size=16, code_col="func", label_col="target"):
+   
+        train_dataset = CodeDataset(train_csv, tokenizer=self.tokenizer, code_col=code_col, label_col=label_col)
+        val_dataset = CodeDataset(val_csv, tokenizer=self.tokenizer, code_col=code_col, label_col=label_col)
 
-            classifier_path = trainer.train_stage1(train_loader, val_loader, epochs=epochs_stage1, save_path=save_path)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 
-            model_path = trainer.train_stage2(train_loader, val_loader, classifier_path, epochs=epochs_stage2, save_path=save_path)
+        classifier_path = self.train_stage1(train_loader, val_loader, epochs=epochs_stage1, save_path=save_path)
 
-            return model, classifier_path, model_path
+
+        model_path = self.train_stage2(train_loader, val_loader, classifier_path, epochs=epochs_stage2, save_path=save_path)
+
+        return self.model, classifier_path, model_path
+
 
 
 
