@@ -178,4 +178,25 @@ class NeurosymbolicFeatureExtractor:
         print(f"Preprocessing completed. Output saved to: {output_csv}")
         return df
 
+    def process_dataset(df: pd.DataFrame) -> pd.DataFrame:
+        extractor = NeurosymbolicFeatureExtractor()
+
+        print(f"Processing {len(df)} samples...")
+
+        df['func'] = df['func'].apply(extractor.clean_code)
+
+        neurosymbolic_features = []
+        for idx, row in df.iterrows():
+            if idx % 100 == 0:
+                print(f"Processed {idx}/{len(df)} samples")
+
+            code = row['func']
+            features = extractor.extract_all_features(code)
+            neurosymbolic_features.append(str(features))
+
+        df['neuro'] = neurosymbolic_features
+        return df
+
+
+
 
