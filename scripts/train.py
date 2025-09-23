@@ -4,9 +4,9 @@ import sys
 import os
 
 # Add the parent directory to Python path
-script_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(script_dir)
-sys.path.insert(0, parent_dir)
+# script_dir = os.path.dirname(os.path.abspath(__file__))
+# parent_dir = os.path.dirname(script_dir)
+# sys.path.insert(0, parent_dir)
 
 import argparse
 import yaml
@@ -129,5 +129,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
