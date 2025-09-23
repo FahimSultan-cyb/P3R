@@ -2,10 +2,6 @@
 
 import sys
 import os
-script_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(script_dir)
-sys.path.insert(0, parent_dir)
-
 import argparse
 import torch
 import pandas as pd
@@ -16,7 +12,7 @@ warnings.filterwarnings("ignore")
 
 from src.preprocessing.neurosymbolic_extractor import NeurosymbolicFeatureExtractor
 from src.data.dataset import CodeDataset, create_collate_fn
-from src.training.corrected_two_stage_trainer import CorrectedTwoStageTrainer
+from src.training.two_stage_trainer import TwoStageTrainer
 
 def main():
     parser = argparse.ArgumentParser(description='Corrected P3R Two-Stage Training')
@@ -82,7 +78,7 @@ def main():
     print("CORRECTED P3R TWO-STAGE TRAINING")
     print("="*50)
     
-    trainer = CorrectedTwoStageTrainer(args.model_name, device, args.output_dir)
+    trainer = TwoStageTrainer(args.model_name, device, args.output_dir)
     
     try:
         final_model, stage1_classifier = trainer.train_full_pipeline(
@@ -116,3 +112,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
