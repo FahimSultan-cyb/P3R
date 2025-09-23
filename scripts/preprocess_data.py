@@ -8,7 +8,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 import argparse
-from src.preprocessing.neurosymbolic_extractor import process_dataset
+from src.preprocessing.neurosymbolic_extractor import preprocess_dataset
 
 def main():
     parser = argparse.ArgumentParser(description='Preprocess dataset with neurosymbolic features')
@@ -33,4 +33,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
