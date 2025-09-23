@@ -439,7 +439,6 @@
         # model_path = self.train_stage2(train_loader, val_loader, classifier_path, epochs=epochs_stage2, save_path=save_path)
 
         # return self.model, classifier_path, model_path
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -449,48 +448,50 @@ import os
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
+from transformers import AutoTokenizer, AutoModel
+
+class ProcessedDataset(Dataset):
+    def __init__(self, processed_df, stage='stage1'):
+        self.data = processed_df
+        self.stage = stage
+        self._validate_processed_columns()
+        
+    def _validate_processed_columns(self):
+        if self.stage == 'stage1':
+            required_cols = ['neuro', 'label']
+        else:
+            required_cols = ['func', 'label']
+            
+        missing_cols = [col for col in required_cols if col not in self.data.columns]
+        
+        if missing_cols:
+            available_cols = self.data.columns.tolist()
+            raise ValueError(f"Missing required columns in processed dataframe: {missing_cols}. Available columns: {available_cols}")
+        
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        row = self.data.iloc[idx]
+        
+        if self.stage == 'stage1':
+            return {
+                'neuro_features': row['neuro'],
+                'label': torch.tensor(row['label'], dtype=torch.long)
+            }
+        else:
+            return {
+                'func_code': row['func'],
+                'label': torch.tensor(row['label'], dtype=torch.long)
+            }
 
 class CodeDataset(Dataset):
-    def __init__(self, csv_file, tokenizer, max_length=512, chunk_size=512, stride=256, code_col='func', label_col='label'):
-        self.data = pd.read_csv(csv_file)
-        self._validate_and_rename_columns()
+    def __init__(self, df, tokenizer, max_length=512, chunk_size=512, stride=256):
+        self.data = df
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.chunk_size = chunk_size
         self.stride = stride
-        self.code_col = code_col
-        self.label_col = label_col
-    
-    def _validate_and_rename_columns(self):
-        columns = self.data.columns.tolist()
-        
-        func_candidates = ['func_cleaned', 'input', 'func', 'code_snipp']
-        label_candidates = ['output', 'target', 'label', 'class']
-        
-        func_col = None
-        label_col = None
-        
-        for col in func_candidates:
-            if col in columns:
-                func_col = col
-                break
-        
-        for col in label_candidates:
-            if col in columns:
-                label_col = col
-                break
-        
-        if func_col is None:
-            raise ValueError(f"Missing code column. Expected one of: {func_candidates}, but found columns: {columns}")
-        
-        if label_col is None:
-            raise ValueError(f"Missing label column. Expected one of: {label_candidates}, but found columns: {columns}")
-        
-        if func_col != 'func':
-            self.data = self.data.rename(columns={func_col: 'func'})
-        
-        if label_col != 'label':
-            self.data = self.data.rename(columns={label_col: 'label'})
         
     def __len__(self):
         return len(self.data)
@@ -524,104 +525,77 @@ class CodeDataset(Dataset):
             'attention_mask': torch.tensor([1 if t != self.tokenizer.pad_token_id else 0 for t in full_tokens[:self.max_length]], dtype=torch.long)
         }
 
-class ProcessedDataset(Dataset):
-    def __init__(self, processed_df):
-        self.data = processed_df
-        self._validate_processed_columns()
-        
-    def _validate_processed_columns(self):
-        required_cols = ['vectorized_features', 'target']
-        missing_cols = [col for col in required_cols if col not in self.data.columns]
-        
-        if missing_cols:
-            available_cols = self.data.columns.tolist()
-            raise ValueError(f"Missing required columns in processed dataframe: {missing_cols}. Available columns: {available_cols}")
-        
-    def __len__(self):
-        return len(self.data)
-    
-    def __getitem__(self, idx):
-        row = self.data.iloc[idx]
-        return {
-            'input_ids': torch.tensor(row['vectorized_features'], dtype=torch.float32),
-            'attention_mask': torch.ones(len(row['vectorized_features']), dtype=torch.long),
-            'label': torch.tensor(row['target'], dtype=torch.long)
-        }
-
 class TwoStageTrainer:
-    def __init__(self, model, device='cuda', learning_rate=2e-5, weight_decay=0.01, batch_size=8):
+    def __init__(self, model, backbone_model_name, device='cuda', learning_rate=2e-5, weight_decay=0.01, batch_size=8):
         self.model = model
+        self.backbone_model_name = backbone_model_name
         self.device = device
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.criterion = nn.CrossEntropyLoss()
+        self.backbone_tokenizer = AutoTokenizer.from_pretrained(backbone_model_name)
+        self.backbone_encoder = AutoModel.from_pretrained(backbone_model_name).to(device)
         
-    def create_dataloaders(self, processed_df, test_size=0.2, random_state=42):
-        train_df, val_df = train_test_split(processed_df, test_size=test_size, random_state=random_state, stratify=processed_df['target'])
+        for param in self.backbone_encoder.parameters():
+            param.requires_grad = False
         
-        train_dataset = ProcessedDataset(train_df)
-        val_dataset = ProcessedDataset(val_df)
+    def vectorize_neuro_features(self, neuro_text_list):
+        vectorized_features = []
         
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+        for neuro_text in neuro_text_list:
+            inputs = self.backbone_tokenizer(
+                str(neuro_text), 
+                return_tensors='pt', 
+                max_length=512, 
+                truncation=True, 
+                padding=True
+            ).to(self.device)
+            
+            with torch.no_grad():
+                outputs = self.backbone_encoder(**inputs)
+                vector = outputs.last_hidden_state.mean(dim=1).squeeze()
+                vectorized_features.append(vector)
+        
+        return torch.stack(vectorized_features)
+        
+    def create_stage1_dataloaders(self, processed_df, test_size=0.2, random_state=42):
+        train_df, val_df = train_test_split(processed_df, test_size=test_size, random_state=random_state, stratify=processed_df['label'])
+        
+        train_dataset = ProcessedDataset(train_df, stage='stage1')
+        val_dataset = ProcessedDataset(val_df, stage='stage1')
+        
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=self.stage1_collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, collate_fn=self.stage1_collate_fn)
         
         return train_loader, val_loader
         
-    def create_stage2_dataloaders(self, csv_file, tokenizer, test_size=0.2, random_state=42):
-        df = pd.read_csv(csv_file)
-        self._validate_and_rename_raw_columns(df)
-        train_df, val_df = train_test_split(df, test_size=test_size, random_state=random_state, stratify=df['label'])
+    def create_stage2_dataloaders(self, processed_df, test_size=0.2, random_state=42):
+        train_df, val_df = train_test_split(processed_df, test_size=test_size, random_state=random_state, stratify=processed_df['label'])
         
-        train_csv_path = 'temp_train.csv'
-        val_csv_path = 'temp_val.csv'
-        train_df.to_csv(train_csv_path, index=False)
-        val_df.to_csv(val_csv_path, index=False)
-        
-        train_dataset = CodeDataset(train_csv_path, tokenizer)
-        val_dataset = CodeDataset(val_csv_path, tokenizer)
+        train_dataset = CodeDataset(train_df, self.backbone_tokenizer)
+        val_dataset = CodeDataset(val_df, self.backbone_tokenizer)
         
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
-        
-        os.remove(train_csv_path)
-        os.remove(val_csv_path)
         
         return train_loader, val_loader
     
-    def _validate_and_rename_raw_columns(self, df):
-        columns = df.columns.tolist()
+    def stage1_collate_fn(self, batch):
+        neuro_features = [item['neuro_features'] for item in batch]
+        labels = [item['label'] for item in batch]
         
-        func_candidates = ['func_cleaned', 'input', 'func', 'code_snipp']
-        label_candidates = ['output', 'target', 'label', 'class']
+        vectorized_features = self.vectorize_neuro_features(neuro_features)
+        labels_tensor = torch.stack(labels)
         
-        func_col = None
-        label_col = None
-        
-        for col in func_candidates:
-            if col in columns:
-                func_col = col
-                break
-        
-        for col in label_candidates:
-            if col in columns:
-                label_col = col
-                break
-        
-        if func_col is None:
-            raise ValueError(f"Missing code column. Expected one of: {func_candidates}, but found columns: {columns}")
-        
-        if label_col is None:
-            raise ValueError(f"Missing label column. Expected one of: {label_candidates}, but found columns: {columns}")
-        
-        if func_col != 'func':
-            df.rename(columns={func_col: 'func'}, inplace=True)
-        
-        if label_col != 'label':
-            df.rename(columns={label_col: 'label'}, inplace=True)
+        return {
+            'input_ids': vectorized_features,
+            'attention_mask': torch.ones(vectorized_features.shape[0], vectorized_features.shape[1], dtype=torch.long),
+            'label': labels_tensor
+        }
         
     def train_stage1(self, train_loader, val_loader, epochs=10, save_path='models/'):
-        print("Starting Stage 1 Training: Neurosymbolic Features → Symbolic Classifier")
+        print("Starting Stage 1 Training: Neuro Features → Vectorization → Symbolic Classifier")
         
         self.model.set_stage(1)
         
@@ -799,11 +773,11 @@ class TwoStageTrainer:
         
         return accuracy, f1, avg_loss
 
-    def train_full_pipeline(self, processed_df, csv_file, tokenizer, epochs_stage1=10, epochs_stage2=10, save_path="models/"):
-        train_loader_stage1, val_loader_stage1 = self.create_dataloaders(processed_df)
+    def train_full_pipeline(self, processed_df, epochs_stage1=10, epochs_stage2=10, save_path="models/"):
+        train_loader_stage1, val_loader_stage1 = self.create_stage1_dataloaders(processed_df)
         classifier_path = self.train_stage1(train_loader_stage1, val_loader_stage1, epochs=epochs_stage1, save_path=save_path)
         
-        train_loader_stage2, val_loader_stage2 = self.create_stage2_dataloaders(csv_file, tokenizer)
+        train_loader_stage2, val_loader_stage2 = self.create_stage2_dataloaders(processed_df)
         model_path = self.train_stage2(train_loader_stage2, val_loader_stage2, classifier_path, epochs=epochs_stage2, save_path=save_path)
         
         return self.model, classifier_path, model_path
