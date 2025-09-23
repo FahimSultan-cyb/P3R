@@ -8,9 +8,13 @@
 
 This repository implements P3R-HeadGate, a novel Parameter-Efficient Fine-Tuning (PEFT) approach for aerospace code vulnerability detection. The method combines Prompt Pool learning with Head Gating mechanisms while keeping the backbone UniXCoder model frozen, achieving high performance with minimal trainable parameters.
 
+### Generalization 
+We have implemented a generalization approach that can be applied to any model, with the functionality available in the Generalized uses folder.
+
+
 ### Key Features
 
-- **Parameter Efficiency**: Only 0.1% of total parameters are trainable
+- **Parameter Efficiency**: Only 0.3% of total parameters are trainable
 - **Prompt Pool Learning**: Dynamic prompt selection based on code context
 - **Head Gating**: Selective attention head activation for better feature extraction
 - **Space Mission Simulation**: Integrated KSP (Kerbal Space Program) mission metrics
