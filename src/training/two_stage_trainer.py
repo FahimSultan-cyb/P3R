@@ -734,7 +734,7 @@ class TwoStageTrainer:
         
         return accuracy, f1, avg_loss
 
-    def train_full_pipeline(self, processed_df, epochs_stage1=10, epochs_stage2=10, save_path="models/"):
+    def train_full_pipeline(self, processed_df, epochs_stage1=10, epochs_stage2=10, save_path="saved_models/"):
         train_loader_stage1, val_loader_stage1 = self.create_stage1_dataloaders(processed_df)
         classifier_path = self.train_stage1(train_loader_stage1, val_loader_stage1, epochs=epochs_stage1, save_path=save_path)
         
@@ -742,5 +742,6 @@ class TwoStageTrainer:
         model_path = self.train_stage2(train_loader_stage2, val_loader_stage2, classifier_path, epochs=epochs_stage2, save_path=save_path)
         
         return self.model, classifier_path, model_path
+
 
 
