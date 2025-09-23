@@ -155,26 +155,27 @@ class NeurosymbolicFeatureExtractor:
         all_features.extend(self.extract_vulnerability_patterns(code))
         return list(set(all_features))
 
-def preprocess_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
-    extractor = NeurosymbolicFeatureExtractor()
-    df = pd.read_csv(input_csv)
+    def preprocess_dataset(input_csv: str, output_csv: str) -> pd.DataFrame:
+        extractor = NeurosymbolicFeatureExtractor()
+        df = pd.read_csv(input_csv)
     
-    print(f"Processing {len(df)} samples...")
+        print(f"Processing {len(df)} samples...")
     
-    df['func'] = df['func'].apply(extractor.clean_code)
+        df['func'] = df['func'].apply(extractor.clean_code)
     
-    neurosymbolic_features = []
-    for idx, row in df.iterrows():
-        if idx % 100 == 0:
-            print(f"Processed {idx}/{len(df)} samples")
+        neurosymbolic_features = []
+        for idx, row in df.iterrows():
+            if idx % 100 == 0:
+                print(f"Processed {idx}/{len(df)} samples")
         
-        code = row['func']
-        features = extractor.extract_all_features(code)
-        neurosymbolic_features.append(str(features))
+            code = row['func']
+            features = extractor.extract_all_features(code)
+            neurosymbolic_features.append(str(features))
     
-    df['neuro'] = neurosymbolic_features
-    df.to_csv(output_csv, index=False)
+        df['neuro'] = neurosymbolic_features
+        df.to_csv(output_csv, index=False)
     
-    print(f"Preprocessing completed. Output saved to: {output_csv}")
-    return df
+        print(f"Preprocessing completed. Output saved to: {output_csv}")
+        return df
+
 
