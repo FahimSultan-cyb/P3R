@@ -178,7 +178,7 @@ class NeurosymbolicFeatureExtractor:
         print(f"Preprocessing completed. Output saved to: {output_csv}")
         return df
 
-    def process_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    def process_dataset(self, df: pd.DataFrame) -> pd.DataFrame:
         extractor = NeurosymbolicFeatureExtractor()
 
         print(f"Processing {len(df)} samples...")
@@ -196,6 +196,7 @@ class NeurosymbolicFeatureExtractor:
 
         df['neuro'] = neurosymbolic_features
         return df
+
 
 
 
