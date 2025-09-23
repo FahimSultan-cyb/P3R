@@ -8,7 +8,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 import argparse
-from src.preprocessing.neurosymbolic_extractor import preprocess_dataset
+from src.preprocessing.neurosymbolic_extractor import process_dataset
 
 def main():
     parser = argparse.ArgumentParser(description='Preprocess dataset with neurosymbolic features')
@@ -24,7 +24,7 @@ def main():
     print(f"Output will be saved to {args.output_csv}")
     
     try:
-        df = preprocess_dataset(args.input_csv, args.output_csv)
+        df = process_dataset(args.input_csv, args.output_csv)
         print(f"Preprocessing completed successfully!")
         print(f"Processed {len(df)} samples")
         print(f"Sample neurosymbolic feature: {df['neuro'].iloc[0][:100]}...")
@@ -33,5 +33,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
