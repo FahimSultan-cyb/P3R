@@ -22,32 +22,33 @@ We have implemented a generalization approach that can be applied to any model, 
 
 ## Quick Start
 ```bash
-!git clone https://github.com/FahimSultan-cyb/P3R-Aerospace.git
-!cd P3R-Aerospace
-!pip install -e P3R-Aerospace
-!python P3R-Aerospace/scripts/download_models.py
+!git clone https://github.com/FahimSultan-cyb/P3R.git
+import os, sys
+root_path = os.path.join(os.getcwd(), "P3R")
+os.chdir(root_path)
+!pip install -e .
+#!python scripts/download_models.py
 
-# Install dependencies
-!pip install -r P3R-Aerospace/requirements.txt
+!pip install -r requirements.txt
 
 ```
 
 ## Run inference on test data
 ```bash
-!python P3R-Aerospace/scripts/inference.py --test_data P3R-Aerospace/data/sample/test.csv --output_dir P3R-Aerospace/results/
+!python scripts/inference.py --test_data data/sample/test.csv --output_dir results/
 
 ```
 
 
 ## Visualization
 ```bash
-python P3R-Aerospace/scripts/visualize.py --data results/ksp_mission_data.csv --output outputs/visualizations/dashboard.png
+python scripts/visualize.py --data results/ksp_mission_data.csv --output outputs/visualizations/dashboard.png
 ```
 
 
 ## Training 
 ```bash
-!python P3R-Aerospace/P3R-Aerospace/scripts/train.py --config P3R-Aerospace/P3R-Aerospace/configs/default.yaml --train_data P3R-Aerospace/P3R-Aerospace/data/sample/test.csv
+!python scripts/train.py --config configs/default.yaml --train_data data/sample/test.csv
 ```
 
 
