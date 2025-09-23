@@ -604,6 +604,22 @@ class TwoStageTrainer:
                 print(f'Stage 1 classifier saved: {classifier_path}')
         return classifier_path
 
+    def create_stage2_dataloaders(self, processed_df, test_size=0.2, random_state=42):
+            train_df, val_df = train_test_split(
+                processed_df,
+                test_size=test_size,
+                random_state=random_state,
+                stratify=processed_df['label']
+            )
+
+            train_dataset = CodeDataset(train_df, self.backbone_tokenizer)
+            val_dataset = CodeDataset(val_df, self.backbone_tokenizer)
+
+            train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+            val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+
+            return train_loader, val_loader
+
 
 
     
@@ -726,4 +742,5 @@ class TwoStageTrainer:
         model_path = self.train_stage2(train_loader_stage2, val_loader_stage2, classifier_path, epochs=epochs_stage2, save_path=save_path)
         
         return self.model, classifier_path, model_path
+
 
