@@ -40,7 +40,7 @@ os.chdir(root_path)
 ```
 
 
-## Visualization
+## Visualization [Aero-space Metrics]
 ```bash
 python scripts/visualize.py --data results/ksp_mission_data.csv --output outputs/visualizations/dashboard.png
 ```
