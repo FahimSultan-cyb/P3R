@@ -4,9 +4,9 @@
 
 ## Quick Start
 ```bash
-!git clone https://github.com/FahimSultan-cyb/P3R-Aerospace.git
+!git clone https://github.com/FahimSultan-cyb/P3R.git
 import os, sys
-root_path = os.path.join(os.getcwd(), "P3R-Aerospace")
+root_path = os.path.join(os.getcwd(), "P3R")
 os.chdir(root_path)
 !pip install -e .
 !python scripts/download_models.py
@@ -34,7 +34,7 @@ model = UniversalP3RModel("microsoft/codebert-base").to("cuda")
 tokenizer = AutoTokenizer.from_pretrained("microsoft/codebert-base")
 
 
-df = pd.read_csv("/content/P3R-Aerospace/data/sample/test.csv")
+df = pd.read_csv("/content/P3R/data/sample/test.csv")
 processed_df = extractor.process_dataset(df)
 
 
