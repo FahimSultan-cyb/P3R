@@ -440,7 +440,6 @@
 
         # return self.model, classifier_path, model_path
 
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -452,21 +451,53 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 
 class CodeDataset(Dataset):
-    def __init__(self, csv_file, tokenizer, max_length=512, chunk_size=512, stride=256, code_col='func', label_col='target'):
+    def __init__(self, csv_file, tokenizer, max_length=512, chunk_size=512, stride=256, code_col='func', label_col='label'):
         self.data = pd.read_csv(csv_file)
+        self._validate_and_rename_columns()
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.chunk_size = chunk_size
         self.stride = stride
         self.code_col = code_col
         self.label_col = label_col
+    
+    def _validate_and_rename_columns(self):
+        columns = self.data.columns.tolist()
+        
+        func_candidates = ['func_cleaned', 'input', 'func', 'code_snipp']
+        label_candidates = ['output', 'target', 'label', 'class']
+        
+        func_col = None
+        label_col = None
+        
+        for col in func_candidates:
+            if col in columns:
+                func_col = col
+                break
+        
+        for col in label_candidates:
+            if col in columns:
+                label_col = col
+                break
+        
+        if func_col is None:
+            raise ValueError(f"Missing code column. Expected one of: {func_candidates}, but found columns: {columns}")
+        
+        if label_col is None:
+            raise ValueError(f"Missing label column. Expected one of: {label_candidates}, but found columns: {columns}")
+        
+        if func_col != 'func':
+            self.data = self.data.rename(columns={func_col: 'func'})
+        
+        if label_col != 'label':
+            self.data = self.data.rename(columns={label_col: 'label'})
         
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, idx):
-        code = str(self.data.iloc[idx][self.code_col])
-        label = int(self.data.iloc[idx][self.label_col])
+        code = str(self.data.iloc[idx]['func'])
+        label = int(self.data.iloc[idx]['label'])
         
         tokens = self.tokenizer.encode(code, add_special_tokens=False, max_length=self.max_length, truncation=True)
         
@@ -496,6 +527,15 @@ class CodeDataset(Dataset):
 class ProcessedDataset(Dataset):
     def __init__(self, processed_df):
         self.data = processed_df
+        self._validate_processed_columns()
+        
+    def _validate_processed_columns(self):
+        required_cols = ['vectorized_features', 'target']
+        missing_cols = [col for col in required_cols if col not in self.data.columns]
+        
+        if missing_cols:
+            available_cols = self.data.columns.tolist()
+            raise ValueError(f"Missing required columns in processed dataframe: {missing_cols}. Available columns: {available_cols}")
         
     def __len__(self):
         return len(self.data)
@@ -530,7 +570,8 @@ class TwoStageTrainer:
         
     def create_stage2_dataloaders(self, csv_file, tokenizer, test_size=0.2, random_state=42):
         df = pd.read_csv(csv_file)
-        train_df, val_df = train_test_split(df, test_size=test_size, random_state=random_state, stratify=df['target'])
+        self._validate_and_rename_raw_columns(df)
+        train_df, val_df = train_test_split(df, test_size=test_size, random_state=random_state, stratify=df['label'])
         
         train_csv_path = 'temp_train.csv'
         val_csv_path = 'temp_val.csv'
@@ -547,6 +588,37 @@ class TwoStageTrainer:
         os.remove(val_csv_path)
         
         return train_loader, val_loader
+    
+    def _validate_and_rename_raw_columns(self, df):
+        columns = df.columns.tolist()
+        
+        func_candidates = ['func_cleaned', 'input', 'func', 'code_snipp']
+        label_candidates = ['output', 'target', 'label', 'class']
+        
+        func_col = None
+        label_col = None
+        
+        for col in func_candidates:
+            if col in columns:
+                func_col = col
+                break
+        
+        for col in label_candidates:
+            if col in columns:
+                label_col = col
+                break
+        
+        if func_col is None:
+            raise ValueError(f"Missing code column. Expected one of: {func_candidates}, but found columns: {columns}")
+        
+        if label_col is None:
+            raise ValueError(f"Missing label column. Expected one of: {label_candidates}, but found columns: {columns}")
+        
+        if func_col != 'func':
+            df.rename(columns={func_col: 'func'}, inplace=True)
+        
+        if label_col != 'label':
+            df.rename(columns={label_col: 'label'}, inplace=True)
         
     def train_stage1(self, train_loader, val_loader, epochs=10, save_path='models/'):
         print("Starting Stage 1 Training: Neurosymbolic Features → Symbolic Classifier")
@@ -735,6 +807,3 @@ class TwoStageTrainer:
         model_path = self.train_stage2(train_loader_stage2, val_loader_stage2, classifier_path, epochs=epochs_stage2, save_path=save_path)
         
         return self.model, classifier_path, model_path
-
-
-
