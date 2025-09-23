@@ -135,10 +135,14 @@ class UniversalP3RModel(nn.Module):
         chunk_embeddings = chunk_embeddings.view(batch_size, num_chunks, -1)
         return torch.mean(chunk_embeddings, dim=1)
     
-    def forward_stage1(self, input_ids, attention_mask):
-        embeddings = self.get_backbone_embeddings(input_ids, attention_mask)
+    # def forward_stage1(self, input_ids, attention_mask):
+    #     embeddings = self.get_backbone_embeddings(input_ids, attention_mask)
+    #     logits = self.symbolic_classifier(embeddings)
+    #     return logits
+    def forward_stage1(self, embeddings, attention_mask=None):
         logits = self.symbolic_classifier(embeddings)
         return logits
+
     
     def forward_stage2(self, chunks, full_code, attention_mask):
         chunk_embeddings = self.get_chunk_embeddings(chunks)
@@ -191,3 +195,4 @@ class UniversalP3RModel(nn.Module):
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         total = sum(p.numel() for p in self.parameters())
         return trainable, total
+
