@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-import sys
-import os
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+# import sys
+# import os
+# script_dir = os.path.dirname(os.path.abspath(__file__))
+# project_root = os.path.abspath(os.path.join(script_dir, os.pardir))
+# if project_root not in sys.path:
+#     sys.path.insert(0, project_root)
 
 import argparse
 from src.preprocessing.neurosymbolic_extractor import process_dataset
@@ -33,6 +33,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
