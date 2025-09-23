@@ -8,7 +8,10 @@
 #     sys.path.insert(0, project_root)
 
 import argparse
-from src.preprocessing.neurosymbolic_extractor import process_dataset
+from src.preprocessing.neurosymbolic_extractor import NeurosymbolicFeatureExtractor
+
+extractor = NeurosymbolicFeatureExtractor()
+
 
 def main():
     parser = argparse.ArgumentParser(description='Preprocess dataset with neurosymbolic features')
@@ -24,7 +27,7 @@ def main():
     print(f"Output will be saved to {args.output_csv}")
     
     try:
-        df = process_dataset(args.input_csv, args.output_csv)
+        df = extractor.process_dataset(args.input_csv, args.output_csv)
         print(f"Preprocessing completed successfully!")
         print(f"Processed {len(df)} samples")
         print(f"Sample neurosymbolic feature: {df['neuro'].iloc[0][:100]}...")
@@ -33,6 +36,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
