@@ -35,19 +35,4 @@ results = trainer.evaluate("test.csv")
 ```
 
 
-## Parameter Configuration
-```bash
-from configs import P3RConfig
 
-config = P3RConfig(
-    model_name="Salesforce/codet5-base",
-    num_prompts=8,
-    prompt_length=12,
-    max_length=1024,
-    chunk_size=256,
-    learning_rate=5e-5,
-    code_col='source_code',
-    label_col='is_vulnerable'
-)
-
-```
