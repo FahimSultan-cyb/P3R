@@ -279,8 +279,6 @@
 #         return trainable, total
 
 
-
-
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
@@ -333,15 +331,44 @@ class HeadGate(nn.Module):
                 return gated_output.view(batch_size, seq_len, hidden_size)
         return attention_output
 
-class ClassifierMLP(nn.Module):
-    def __init__(self, embed_dim, num_classes, dropout):
+class PretrainedClassifierHead(nn.Module):
+    def __init__(self, model_name, embed_dim, num_classes):
         super().__init__()
-        self.classifier = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(embed_dim // 2, num_classes)
-        )
+        self.model_name = model_name.lower()
+        self.embed_dim = embed_dim
+        self.num_classes = num_classes
+        
+        if 'codebert' in self.model_name or 'roberta' in self.model_name:
+            self.classifier = nn.Sequential(
+                nn.Dropout(0.1),
+                nn.Linear(embed_dim, num_classes)
+            )
+        elif 'unixcoder' in self.model_name:
+            self.classifier = nn.Sequential(
+                nn.Linear(embed_dim, embed_dim),
+                nn.Tanh(),
+                nn.Dropout(0.1),
+                nn.Linear(embed_dim, num_classes)
+            )
+        elif 'graphcodebert' in self.model_name:
+            self.classifier = nn.Sequential(
+                nn.Dropout(0.1),
+                nn.Linear(embed_dim, num_classes)
+            )
+        elif 'codet5' in self.model_name or 't5' in self.model_name:
+            self.classifier = nn.Sequential(
+                nn.Dropout(0.1),
+                nn.Linear(embed_dim, embed_dim // 2),
+                nn.ReLU(),
+                nn.Linear(embed_dim // 2, num_classes)
+            )
+        else:
+            self.classifier = nn.Sequential(
+                nn.Linear(embed_dim, embed_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(0.1),
+                nn.Linear(embed_dim // 2, num_classes)
+            )
         
     def forward(self, x):
         return self.classifier(x)
@@ -370,15 +397,13 @@ class UniversalModelWrapper:
     def _prepare_inputs_for_model(self, inputs_embeds, attention_mask):
         kwargs = {
             'inputs_embeds': inputs_embeds, 
-            'attention_mask': attention_mask
+            'attention_mask': attention_mask.clamp(0, 1)
         }
         
         batch_size, seq_len = inputs_embeds.shape[:2]
         
         if self.model_type == 'bert_like':
             kwargs['token_type_ids'] = torch.zeros(batch_size, seq_len, dtype=torch.long, device=inputs_embeds.device)
-            if hasattr(self.model.config, 'position_ids'):
-                kwargs['position_ids'] = torch.arange(seq_len, device=inputs_embeds.device).expand(batch_size, -1)
         
         return kwargs
     
@@ -402,6 +427,9 @@ class UniversalModelWrapper:
     
     def forward_with_ids(self, input_ids, attention_mask):
         batch_size, seq_len = input_ids.shape
+        input_ids = input_ids.clamp(0, self.tokenizer.vocab_size - 1)
+        attention_mask = attention_mask.clamp(0, 1)
+        
         kwargs = {
             'input_ids': input_ids, 
             'attention_mask': attention_mask
@@ -550,7 +578,7 @@ class P3RHeadGateModel(nn.Module):
         prompt_weights = self.router(chunk_embeddings)
         composite_prompt = self.prompt_pool(prompt_weights)
         
-        full_code_attention = attention_mask
+        full_code_attention = attention_mask.clamp(0, 1)
         prompt_length = composite_prompt.size(1)
         
         if full_code.size(1) + prompt_length > self.config.max_length:
@@ -558,12 +586,14 @@ class P3RHeadGateModel(nn.Module):
             full_code = full_code[:, :truncate_length]
             full_code_attention = full_code_attention[:, :truncate_length]
         
+        full_code = full_code.clamp(0, len(self.tokenizer) - 1)
         inputs_embeds = self._get_input_embeddings(full_code)
         combined_embeds = torch.cat([composite_prompt, inputs_embeds], dim=1)
         
-        extended_attention_mask = torch.ones(attention_mask.size(0), prompt_length, 
-                                           device=attention_mask.device, dtype=attention_mask.dtype)
+        extended_attention_mask = torch.ones(full_code_attention.size(0), prompt_length, 
+                                           device=full_code_attention.device, dtype=full_code_attention.dtype)
         combined_attention_mask = torch.cat([extended_attention_mask, full_code_attention], dim=1)
+        combined_attention_mask = combined_attention_mask.clamp(0, 1)
         
         outputs = self.wrapper.forward_with_embeds(combined_embeds, combined_attention_mask)
         
