@@ -1,6 +1,6 @@
 from src.models.p3r_model import P3RHeadGateModel
 from src.models.p3r_trainer import P3RTrainer
-from configs import P3RConfig
+from configs.config import P3RConfig
 
 def custom_model_example():
     config = P3RConfig(
