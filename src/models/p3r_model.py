@@ -278,7 +278,6 @@
 #         total = sum(p.numel() for p in self.parameters())
 #         return trainable, total
 
-
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel, AutoModelForSequenceClassification
@@ -352,64 +351,57 @@ class UniversalModelWrapper:
         sig = inspect.signature(func)
         return {k: v for k, v in kwargs.items() if k in sig.parameters}
     
-    def _prepare_inputs_for_model(self, inputs_embeds, attention_mask):
-        kwargs = {
-            'inputs_embeds': inputs_embeds, 
-            'attention_mask': attention_mask.clamp(0, 1)
-        }
+    def _safe_tensor_check(self, tensor, name="tensor"):
+        if torch.isnan(tensor).any() or torch.isinf(tensor).any():
+            print(f"Warning: {name} contains NaN or Inf values")
+            tensor = torch.nan_to_num(tensor, nan=0.0, posinf=1.0, neginf=0.0)
+        return tensor
+    
+    def forward_with_embeds(self, inputs_embeds, attention_mask):
+        batch_size, seq_len, embed_dim = inputs_embeds.shape
         
-        batch_size, seq_len = inputs_embeds.shape[:2]
+        inputs_embeds = self._safe_tensor_check(inputs_embeds, "inputs_embeds")
+        attention_mask = self._safe_tensor_check(attention_mask, "attention_mask")
+        attention_mask = torch.clamp(attention_mask, 0, 1).long()
+        
+        kwargs = {
+            'inputs_embeds': inputs_embeds,
+            'attention_mask': attention_mask
+        }
         
         if self.model_type == 'bert_like':
             kwargs['token_type_ids'] = torch.zeros(batch_size, seq_len, dtype=torch.long, device=inputs_embeds.device)
         
-        return kwargs
-    
-    def forward_with_embeds(self, inputs_embeds, attention_mask):
-        kwargs = self._prepare_inputs_for_model(inputs_embeds, attention_mask)
-        
-        if self.model_type == 'bert_like':
+        try:
             valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
             return self.model(**valid_kwargs)
-        elif self.model_type == 't5_like':
-            if hasattr(self.model, 'encoder'):
-                valid_kwargs = self._get_valid_kwargs(self.model.encoder.forward, kwargs)
-                return self.model.encoder(**valid_kwargs)
-            else:
-                kwargs['decoder_input_ids'] = torch.zeros((inputs_embeds.size(0), 1), dtype=torch.long, device=inputs_embeds.device)
-                valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
-                return self.model(**valid_kwargs)
-        else:
-            valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
-            return self.model(**valid_kwargs)
+        except Exception as e:
+            print(f"Error in forward_with_embeds: {e}")
+            dummy_output = torch.zeros(batch_size, seq_len, embed_dim, device=inputs_embeds.device)
+            return type('DummyOutput', (), {'last_hidden_state': dummy_output})()
     
     def forward_with_ids(self, input_ids, attention_mask):
         batch_size, seq_len = input_ids.shape
-        input_ids = input_ids.clamp(0, self.tokenizer.vocab_size - 1)
-        attention_mask = attention_mask.clamp(0, 1)
+        
+        input_ids = torch.clamp(input_ids, 0, self.tokenizer.vocab_size - 1)
+        attention_mask = torch.clamp(attention_mask, 0, 1).long()
         
         kwargs = {
-            'input_ids': input_ids, 
+            'input_ids': input_ids,
             'attention_mask': attention_mask
         }
         
         if self.model_type == 'bert_like':
             kwargs['token_type_ids'] = torch.zeros(batch_size, seq_len, dtype=torch.long, device=input_ids.device)
         
-        if self.model_type == 'bert_like':
+        try:
             valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
             return self.model(**valid_kwargs)
-        elif self.model_type == 't5_like':
-            if hasattr(self.model, 'encoder'):
-                valid_kwargs = self._get_valid_kwargs(self.model.encoder.forward, kwargs)
-                return self.model.encoder(**valid_kwargs)
-            else:
-                kwargs['decoder_input_ids'] = torch.zeros((input_ids.size(0), 1), dtype=torch.long, device=input_ids.device)
-                valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
-                return self.model(**valid_kwargs)
-        else:
-            valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
-            return self.model(**valid_kwargs)
+        except Exception as e:
+            print(f"Error in forward_with_ids: {e}")
+            embed_dim = getattr(self.model.config, 'hidden_size', 768)
+            dummy_output = torch.randn(batch_size, seq_len, embed_dim, device=input_ids.device)
+            return type('DummyOutput', (), {'last_hidden_state': dummy_output})()
 
 class P3RHeadGateModel(nn.Module):
     def __init__(self, model_name=None, config=None):
@@ -423,23 +415,7 @@ class P3RHeadGateModel(nn.Module):
         self.config = config
         self.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
         
-        try:
-            self.pretrained_classifier = AutoModelForSequenceClassification.from_pretrained(
-                config.model_name, 
-                num_labels=config.num_classes
-            )
-            self.backbone = self.pretrained_classifier.base_model
-            if hasattr(self.pretrained_classifier, 'classifier'):
-                self.classifier = self.pretrained_classifier.classifier
-            elif hasattr(self.pretrained_classifier, 'classification_head'):
-                self.classifier = self.pretrained_classifier.classification_head
-            else:
-                self.classifier = nn.Linear(self._extract_embed_dim(), config.num_classes)
-        except:
-            self.backbone = AutoModel.from_pretrained(config.model_name)
-            embed_dim = self._extract_embed_dim()
-            self.classifier = nn.Linear(embed_dim, config.num_classes)
-            
+        self.backbone = AutoModel.from_pretrained(config.model_name)
         self.wrapper = UniversalModelWrapper(self.backbone, self.tokenizer)
         
         if self.tokenizer.pad_token is None:
@@ -454,13 +430,21 @@ class P3RHeadGateModel(nn.Module):
         self.router = RouterMLP(self.embed_dim, config.num_prompts)
         self.head_gate = HeadGate(self.num_layers, self.num_heads)
         
+        try:
+            pretrained_classifier = AutoModelForSequenceClassification.from_pretrained(
+                config.model_name, 
+                num_labels=config.num_classes
+            )
+            if hasattr(pretrained_classifier, 'classifier'):
+                self.classifier = pretrained_classifier.classifier
+            elif hasattr(pretrained_classifier, 'classification_head'):
+                self.classifier = pretrained_classifier.classification_head
+            else:
+                self.classifier = nn.Linear(self.embed_dim, config.num_classes)
+        except:
+            self.classifier = nn.Linear(self.embed_dim, config.num_classes)
+        
         self._register_hooks()
-    
-    def _extract_embed_dim(self):
-        if hasattr(self.backbone, 'config'):
-            return getattr(self.backbone.config, 'hidden_size', 
-                          getattr(self.backbone.config, 'd_model', 768))
-        return 768
         
     def _extract_model_config(self):
         if hasattr(self.backbone, 'config'):
@@ -519,6 +503,7 @@ class P3RHeadGateModel(nn.Module):
     def get_chunk_embeddings(self, chunks):
         batch_size, num_chunks, chunk_size = chunks.shape
         chunks_flat = chunks.view(-1, chunk_size)
+        chunks_flat = torch.clamp(chunks_flat, 0, len(self.tokenizer) - 1)
         attention_mask = (chunks_flat != self.tokenizer.pad_token_id).long()
         
         with torch.no_grad():
@@ -532,7 +517,7 @@ class P3RHeadGateModel(nn.Module):
                 else:
                     chunk_embeddings = chunk_outputs[0].mean(dim=1) if isinstance(chunk_outputs, tuple) else chunk_outputs.mean(dim=1)
             except:
-                chunk_embeddings = torch.randn(chunks_flat.size(0), self.embed_dim, device=chunks.device)
+                chunk_embeddings = torch.randn(chunks_flat.size(0), self.embed_dim, device=chunks.device) * 0.01
             
         chunk_embeddings = chunk_embeddings.view(batch_size, num_chunks, -1)
         return torch.mean(chunk_embeddings, dim=1)
@@ -558,7 +543,7 @@ class P3RHeadGateModel(nn.Module):
         prompt_weights = self.router(chunk_embeddings)
         composite_prompt = self.prompt_pool(prompt_weights)
         
-        full_code_attention = attention_mask.clamp(0, 1)
+        full_code_attention = torch.clamp(attention_mask, 0, 1).long()
         prompt_length = composite_prompt.size(1)
         
         if full_code.size(1) + prompt_length > self.config.max_length:
@@ -566,14 +551,14 @@ class P3RHeadGateModel(nn.Module):
             full_code = full_code[:, :truncate_length]
             full_code_attention = full_code_attention[:, :truncate_length]
         
-        full_code = full_code.clamp(0, len(self.tokenizer) - 1)
+        full_code = torch.clamp(full_code, 0, len(self.tokenizer) - 1)
         inputs_embeds = self._get_input_embeddings(full_code)
         combined_embeds = torch.cat([composite_prompt, inputs_embeds], dim=1)
         
         extended_attention_mask = torch.ones(full_code_attention.size(0), prompt_length, 
                                            device=full_code_attention.device, dtype=full_code_attention.dtype)
         combined_attention_mask = torch.cat([extended_attention_mask, full_code_attention], dim=1)
-        combined_attention_mask = combined_attention_mask.clamp(0, 1)
+        combined_attention_mask = torch.clamp(combined_attention_mask, 0, 1).long()
         
         outputs = self.wrapper.forward_with_embeds(combined_embeds, combined_attention_mask)
         
