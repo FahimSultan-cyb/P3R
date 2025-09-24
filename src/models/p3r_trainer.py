@@ -5,7 +5,7 @@ from tqdm import tqdm
 from src.models.p3r_model import P3RHeadGateModel
 from src.models.p3r_dataset import create_dataloader
 from src.models.metrics import calculate_comprehensive_metrics, print_evaluation_results
-from configs import P3RConfig
+from configs.config import P3RConfig
 
 class P3RTrainer:
     def __init__(self, model=None, config=None):
