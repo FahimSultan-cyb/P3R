@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
 from configs.config import P3RConfig
+import inspect
 
 class PromptPool(nn.Module):
     def __init__(self, num_prompts, prompt_length, embed_dim):
@@ -62,6 +63,62 @@ class ClassifierMLP(nn.Module):
     def forward(self, x):
         return self.classifier(x)
 
+class UniversalModelWrapper:
+    def __init__(self, model):
+        self.model = model
+        self.model_type = self._detect_model_type()
+        
+    def _detect_model_type(self):
+        model_class = self.model.__class__.__name__.lower()
+        if 'roberta' in model_class or 'bert' in model_class:
+            return 'bert_like'
+        elif 't5' in model_class:
+            return 't5_like'
+        elif 'gpt' in model_class:
+            return 'gpt_like'
+        else:
+            return 'generic'
+    
+    def _get_valid_kwargs(self, func, kwargs):
+        sig = inspect.signature(func)
+        return {k: v for k, v in kwargs.items() if k in sig.parameters}
+    
+    def forward_with_embeds(self, inputs_embeds, attention_mask):
+        kwargs = {'inputs_embeds': inputs_embeds, 'attention_mask': attention_mask}
+        
+        if self.model_type == 'bert_like':
+            valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
+            return self.model(**valid_kwargs)
+        elif self.model_type == 't5_like':
+            if hasattr(self.model, 'encoder'):
+                valid_kwargs = self._get_valid_kwargs(self.model.encoder.forward, kwargs)
+                return self.model.encoder(**valid_kwargs)
+            else:
+                kwargs['decoder_input_ids'] = torch.zeros((inputs_embeds.size(0), 1), dtype=torch.long, device=inputs_embeds.device)
+                valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
+                return self.model(**valid_kwargs)
+        else:
+            valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
+            return self.model(**valid_kwargs)
+    
+    def forward_with_ids(self, input_ids, attention_mask):
+        kwargs = {'input_ids': input_ids, 'attention_mask': attention_mask}
+        
+        if self.model_type == 'bert_like':
+            valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
+            return self.model(**valid_kwargs)
+        elif self.model_type == 't5_like':
+            if hasattr(self.model, 'encoder'):
+                valid_kwargs = self._get_valid_kwargs(self.model.encoder.forward, kwargs)
+                return self.model.encoder(**valid_kwargs)
+            else:
+                kwargs['decoder_input_ids'] = torch.zeros((input_ids.size(0), 1), dtype=torch.long, device=input_ids.device)
+                valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
+                return self.model(**valid_kwargs)
+        else:
+            valid_kwargs = self._get_valid_kwargs(self.model.forward, kwargs)
+            return self.model(**valid_kwargs)
+
 class P3RHeadGateModel(nn.Module):
     def __init__(self, model_name=None, config=None):
         super().__init__()
@@ -74,6 +131,7 @@ class P3RHeadGateModel(nn.Module):
         self.config = config
         self.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
         self.backbone = AutoModel.from_pretrained(config.model_name)
+        self.wrapper = UniversalModelWrapper(self.backbone)
         
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -117,38 +175,41 @@ class P3RHeadGateModel(nn.Module):
             return hook
         
         try:
+            layers = []
             if hasattr(self.backbone, 'encoder'):
                 if hasattr(self.backbone.encoder, 'layer'):
-                    for i, layer in enumerate(self.backbone.encoder.layer[:self.num_layers]):
-                        if hasattr(layer, 'attention') and hasattr(layer.attention, 'self'):
-                            layer.attention.self.register_forward_hook(create_hook(i))
+                    layers = self.backbone.encoder.layer
                 elif hasattr(self.backbone.encoder, 'block'):
-                    for i, block in enumerate(self.backbone.encoder.block[:self.num_layers]):
-                        if hasattr(block, 'layer') and len(block.layer) > 0:
-                            attention_layer = block.layer[0]
-                            if hasattr(attention_layer, 'SelfAttention'):
-                                attention_layer.SelfAttention.register_forward_hook(create_hook(i))
+                    layers = self.backbone.encoder.block
             elif hasattr(self.backbone, 'transformer') and hasattr(self.backbone.transformer, 'h'):
-                for i, layer in enumerate(self.backbone.transformer.h[:self.num_layers]):
-                    if hasattr(layer, 'attn'):
-                        layer.attn.register_forward_hook(create_hook(i))
+                layers = self.backbone.transformer.h
+            elif hasattr(self.backbone, 'encoder') and hasattr(self.backbone.encoder, 'layers'):
+                layers = self.backbone.encoder.layers
+            
+            for i, layer in enumerate(layers[:self.num_layers]):
+                attention_module = None
+                if hasattr(layer, 'attention') and hasattr(layer.attention, 'self'):
+                    attention_module = layer.attention.self
+                elif hasattr(layer, 'layer') and len(layer.layer) > 0 and hasattr(layer.layer[0], 'SelfAttention'):
+                    attention_module = layer.layer[0].SelfAttention
+                elif hasattr(layer, 'attn'):
+                    attention_module = layer.attn
+                elif hasattr(layer, 'self_attn'):
+                    attention_module = layer.self_attn
+                
+                if attention_module:
+                    attention_module.register_forward_hook(create_hook(i))
         except:
             pass
     
     def get_chunk_embeddings(self, chunks):
         batch_size, num_chunks, chunk_size = chunks.shape
         chunks_flat = chunks.view(-1, chunk_size)
-        
         attention_mask = (chunks_flat != self.tokenizer.pad_token_id).long()
         
         with torch.no_grad():
             try:
-                if hasattr(self.backbone, 'encoder') and not hasattr(self.backbone, 'decoder'):
-                    chunk_outputs = self.backbone.encoder(input_ids=chunks_flat, attention_mask=attention_mask)
-                elif hasattr(self.backbone, 'encoder') and hasattr(self.backbone, 'decoder'):
-                    chunk_outputs = self.backbone.encoder(input_ids=chunks_flat, attention_mask=attention_mask)
-                else:
-                    chunk_outputs = self.backbone(input_ids=chunks_flat, attention_mask=attention_mask)
+                chunk_outputs = self.wrapper.forward_with_ids(chunks_flat, attention_mask)
                 
                 if hasattr(chunk_outputs, 'last_hidden_state'):
                     chunk_embeddings = chunk_outputs.last_hidden_state.mean(dim=1)
@@ -170,10 +231,12 @@ class P3RHeadGateModel(nn.Module):
                 return self.backbone.shared(input_ids)
             elif hasattr(self.backbone, 'encoder') and hasattr(self.backbone.encoder, 'embed_tokens'):
                 return self.backbone.encoder.embed_tokens(input_ids)
+            elif hasattr(self.backbone, 'wte'):
+                return self.backbone.wte(input_ids)
             else:
                 return self.backbone.get_input_embeddings()(input_ids)
         except:
-            embedding_layer = nn.Embedding(self.tokenizer.vocab_size, self.embed_dim).to(input_ids.device)
+            embedding_layer = nn.Embedding(len(self.tokenizer), self.embed_dim, device=input_ids.device)
             return embedding_layer(input_ids)
     
     def forward(self, chunks, full_code, attention_mask):
@@ -196,15 +259,7 @@ class P3RHeadGateModel(nn.Module):
                                            device=attention_mask.device, dtype=attention_mask.dtype)
         combined_attention_mask = torch.cat([extended_attention_mask, full_code_attention], dim=1)
         
-        try:
-            if hasattr(self.backbone, 'encoder') and not hasattr(self.backbone, 'decoder'):
-                outputs = self.backbone.encoder(inputs_embeds=combined_embeds, attention_mask=combined_attention_mask)
-            elif hasattr(self.backbone, 'encoder') and hasattr(self.backbone, 'decoder'):
-                outputs = self.backbone.encoder(inputs_embeds=combined_embeds, attention_mask=combined_attention_mask)
-            else:
-                outputs = self.backbone(inputs_embeds=combined_embeds, attention_mask=combined_attention_mask)
-        except:
-            outputs = self.backbone(inputs_embeds=combined_embeds, attention_mask=combined_attention_mask, decoder_input_ids=torch.zeros_like(full_code[:, :1]), decoder_attention_mask=torch.ones_like(full_code[:, :1]))
+        outputs = self.wrapper.forward_with_embeds(combined_embeds, combined_attention_mask)
         
         if hasattr(outputs, 'last_hidden_state'):
             sequence_output = outputs.last_hidden_state
