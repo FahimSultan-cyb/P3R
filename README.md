@@ -27,7 +27,7 @@ import os, sys
 root_path = os.path.join(os.getcwd(), "P3R")
 os.chdir(root_path)
 !pip install -e .
-#!python scripts/download_models.py
+!python scripts/download_models.py
 
 !pip install -r requirements.txt
 
