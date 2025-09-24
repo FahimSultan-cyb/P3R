@@ -15,13 +15,16 @@ class P3RTrainer:
         self.device = torch.device(config.device)
         
         if model is None:
-            self.model = P3RHeadGateModel(config=config).to(self.device)
+            self.model = P3RHeadGateModel(config=config).to("cpu")
         else:
+            model = model.to("cpu")
             self.model = model.to(self.device)
             
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.AdamW([p for p in self.model.parameters() if p.requires_grad], 
-                                   lr=config.learning_rate)
+        self.optimizer = optim.AdamW(
+            [p for p in self.model.parameters() if p.requires_grad], 
+            lr=config.learning_rate
+        )
         
     def train(self, train_csv, epochs=None):
         if epochs is None:
