@@ -9,6 +9,11 @@ os.chdir(root_path)
 
 !pip install -r requirements.txt
 
+root_path = os.path.join(os.getcwd(), "P3R_peft")
+os.chdir(root_path)
+!pip install -e .
+pip install -r requirements.txt
+
 ```
 
 ## Quick Start
