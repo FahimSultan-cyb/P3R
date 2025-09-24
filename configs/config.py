@@ -16,7 +16,7 @@ class P3RConfig:
     dropout: float = 0.1
     device: str = "auto"
     code_col: str = "func"
-    label_col: str = "target"
+    label_col: str = "label"
     
     def __post_init__(self):
         if self.device == "auto":
