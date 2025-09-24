@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
-from configs import P3RConfig
+from configs.config import P3RConfig
 
 class PromptPool(nn.Module):
     def __init__(self, num_prompts, prompt_length, embed_dim):
