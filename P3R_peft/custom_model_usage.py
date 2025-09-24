@@ -15,8 +15,8 @@ def custom_model_example():
         learning_rate=5e-5,
         num_epochs=10,
         dropout=0.2,
-        code_col='code_snippet',
-        label_col='vulnerability'
+        code_col='func',
+        label_col='label'
     )
     
     model = P3RHeadGateModel(config=config)
