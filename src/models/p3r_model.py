@@ -281,7 +281,7 @@
 
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, AutoModelForSequenceClassification
 from configs.config import P3RConfig
 import inspect
 
@@ -330,48 +330,6 @@ class HeadGate(nn.Module):
                 gated_output = attention_output * self.gates[layer_idx].view(1, 1, self.num_heads, 1)
                 return gated_output.view(batch_size, seq_len, hidden_size)
         return attention_output
-
-class PretrainedClassifierHead(nn.Module):
-    def __init__(self, model_name, embed_dim, num_classes):
-        super().__init__()
-        self.model_name = model_name.lower()
-        self.embed_dim = embed_dim
-        self.num_classes = num_classes
-        
-        if 'codebert' in self.model_name or 'roberta' in self.model_name:
-            self.classifier = nn.Sequential(
-                nn.Dropout(0.1),
-                nn.Linear(embed_dim, num_classes)
-            )
-        elif 'unixcoder' in self.model_name:
-            self.classifier = nn.Sequential(
-                nn.Linear(embed_dim, embed_dim),
-                nn.Tanh(),
-                nn.Dropout(0.1),
-                nn.Linear(embed_dim, num_classes)
-            )
-        elif 'graphcodebert' in self.model_name:
-            self.classifier = nn.Sequential(
-                nn.Dropout(0.1),
-                nn.Linear(embed_dim, num_classes)
-            )
-        elif 'codet5' in self.model_name or 't5' in self.model_name:
-            self.classifier = nn.Sequential(
-                nn.Dropout(0.1),
-                nn.Linear(embed_dim, embed_dim // 2),
-                nn.ReLU(),
-                nn.Linear(embed_dim // 2, num_classes)
-            )
-        else:
-            self.classifier = nn.Sequential(
-                nn.Linear(embed_dim, embed_dim // 2),
-                nn.ReLU(),
-                nn.Dropout(0.1),
-                nn.Linear(embed_dim // 2, num_classes)
-            )
-        
-    def forward(self, x):
-        return self.classifier(x)
 
 class UniversalModelWrapper:
     def __init__(self, model, tokenizer):
@@ -464,7 +422,24 @@ class P3RHeadGateModel(nn.Module):
             
         self.config = config
         self.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
-        self.backbone = AutoModel.from_pretrained(config.model_name)
+        
+        try:
+            self.pretrained_classifier = AutoModelForSequenceClassification.from_pretrained(
+                config.model_name, 
+                num_labels=config.num_classes
+            )
+            self.backbone = self.pretrained_classifier.base_model
+            if hasattr(self.pretrained_classifier, 'classifier'):
+                self.classifier = self.pretrained_classifier.classifier
+            elif hasattr(self.pretrained_classifier, 'classification_head'):
+                self.classifier = self.pretrained_classifier.classification_head
+            else:
+                self.classifier = nn.Linear(self._extract_embed_dim(), config.num_classes)
+        except:
+            self.backbone = AutoModel.from_pretrained(config.model_name)
+            embed_dim = self._extract_embed_dim()
+            self.classifier = nn.Linear(embed_dim, config.num_classes)
+            
         self.wrapper = UniversalModelWrapper(self.backbone, self.tokenizer)
         
         if self.tokenizer.pad_token is None:
@@ -478,9 +453,14 @@ class P3RHeadGateModel(nn.Module):
         self.prompt_pool = PromptPool(config.num_prompts, config.prompt_length, self.embed_dim)
         self.router = RouterMLP(self.embed_dim, config.num_prompts)
         self.head_gate = HeadGate(self.num_layers, self.num_heads)
-        self.classifier = ClassifierMLP(self.embed_dim, config.num_classes, config.dropout)
         
         self._register_hooks()
+    
+    def _extract_embed_dim(self):
+        if hasattr(self.backbone, 'config'):
+            return getattr(self.backbone.config, 'hidden_size', 
+                          getattr(self.backbone.config, 'd_model', 768))
+        return 768
         
     def _extract_model_config(self):
         if hasattr(self.backbone, 'config'):
