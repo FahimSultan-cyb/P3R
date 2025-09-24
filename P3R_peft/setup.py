@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-with open("README.md", "r", encoding="utf-8") as fh:
+with open("Readme.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
@@ -11,7 +11,7 @@ setup(
     description="Parameter-Efficient Fine-tuning for Code Language Models using P3R and HeadGate",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/FahimSultan-cyb/P3R/P#R_peft",
+    url="https://github.com/FahimSultan-cyb/P3R",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
