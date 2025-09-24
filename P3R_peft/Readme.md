@@ -9,14 +9,20 @@ os.chdir(root_path)
 
 !pip install -r requirements.txt
 
-root_path = os.path.join(os.getcwd(), "P3R_peft")
-os.chdir(root_path)
+peft_root = os.path.join(os.getcwd(), "P3R_peft")
+os.chdir(peft_root)
 !pip install -e .
-pip install -r requirements.txt
+!pip install -r requirements.txt
 
 ```
 
 ## Quick Start
+
+### To run this cell, must run this
+```bash
+os.chdir(root_path)
+```
+
 ```bash
 from src.models.p3r_model import P3RHeadGateModel
 from src.models.p3r_trainer import P3RTrainer
