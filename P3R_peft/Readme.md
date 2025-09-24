@@ -18,12 +18,8 @@ os.chdir(peft_root)
 
 ## Quick Start
 
-### To run this cell, must run this
 ```bash
 os.chdir(root_path)
-```
-
-```bash
 from src.models.p3r_model import P3RHeadGateModel
 from src.models.p3r_trainer import P3RTrainer
 from transformers import AutoTokenizer
