@@ -12,20 +12,20 @@ class P3RTrainer:
         if config is None:
             config = P3RConfig()
         self.config = config
-        self.device = torch.device(config.device)
-        
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         if model is None:
-            self.model = P3RHeadGateModel(config=config).to("cpu")
-        else:
-            model = model.to("cpu")
-            self.model = model.to(self.device)
-            
+            model = P3RHeadGateModel(config=config)
+
+        for submodule in model.children():
+            submodule.to(self.device)
+        self.model = model
+
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.AdamW(
             [p for p in self.model.parameters() if p.requires_grad], 
             lr=config.learning_rate
         )
-        
     def train(self, train_csv, epochs=None):
         if epochs is None:
             epochs = self.config.num_epochs
