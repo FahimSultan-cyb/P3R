@@ -78,9 +78,31 @@ class P3RHeadGateModel(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = False
             
-        self.embed_dim = self.backbone.config.hidden_size
-        self.num_layers = self.backbone.config.num_hidden_layers
-        self.num_heads = self.backbone.config.num_attention_heads
+        if hasattr(self.backbone, 'config'):
+            if hasattr(self.backbone.config, 'hidden_size'):
+                self.embed_dim = self.backbone.config.hidden_size
+            elif hasattr(self.backbone.config, 'd_model'):
+                self.embed_dim = self.backbone.config.d_model
+            else:
+                self.embed_dim = 768
+                
+            if hasattr(self.backbone.config, 'num_hidden_layers'):
+                self.num_layers = self.backbone.config.num_hidden_layers
+            elif hasattr(self.backbone.config, 'num_layers'):
+                self.num_layers = self.backbone.config.num_layers
+            else:
+                self.num_layers = 12
+                
+            if hasattr(self.backbone.config, 'num_attention_heads'):
+                self.num_heads = self.backbone.config.num_attention_heads
+            elif hasattr(self.backbone.config, 'num_heads'):
+                self.num_heads = self.backbone.config.num_heads
+            else:
+                self.num_heads = 12
+        else:
+            self.embed_dim = 768
+            self.num_layers = 12
+            self.num_heads = 12
         
         self.prompt_pool = PromptPool(config.num_prompts, config.prompt_length, self.embed_dim)
         self.router = RouterMLP(self.embed_dim, config.num_prompts)
@@ -100,8 +122,22 @@ class P3RHeadGateModel(nn.Module):
                     return self.head_gate.apply_gate(output, layer_idx)
             return hook
             
-        for i, layer in enumerate(self.backbone.encoder.layer):
-            layer.attention.self.register_forward_hook(create_hook(i))
+        if hasattr(self.backbone, 'encoder'):
+            if hasattr(self.backbone.encoder, 'layer'):
+                for i, layer in enumerate(self.backbone.encoder.layer):
+                    if hasattr(layer, 'attention') and hasattr(layer.attention, 'self'):
+                        layer.attention.self.register_forward_hook(create_hook(i))
+            elif hasattr(self.backbone.encoder, 'block'):
+                for i, block in enumerate(self.backbone.encoder.block):
+                    if hasattr(block, 'layer') and len(block.layer) > 0:
+                        attention_layer = block.layer[0]
+                        if hasattr(attention_layer, 'SelfAttention'):
+                            attention_layer.SelfAttention.register_forward_hook(create_hook(i))
+        elif hasattr(self.backbone, 'transformer'):
+            if hasattr(self.backbone.transformer, 'h'):
+                for i, layer in enumerate(self.backbone.transformer.h):
+                    if hasattr(layer, 'attn'):
+                        layer.attn.register_forward_hook(create_hook(i))
     
     def get_chunk_embeddings(self, chunks):
         batch_size, num_chunks, chunk_size = chunks.shape
@@ -124,12 +160,17 @@ class P3RHeadGateModel(nn.Module):
         full_code_attention = attention_mask
         prompt_length = composite_prompt.size(1)
         
-        if full_code.size(1) + prompt_length > 512:
-            truncate_length = 512 - prompt_length
+        if full_code.size(1) + prompt_length > self.config.max_length:
+            truncate_length = self.config.max_length - prompt_length
             full_code = full_code[:, :truncate_length]
             full_code_attention = full_code_attention[:, :truncate_length]
         
-        inputs_embeds = self.backbone.embeddings.word_embeddings(full_code)
+        if hasattr(self.backbone, 'embeddings') and hasattr(self.backbone.embeddings, 'word_embeddings'):
+            inputs_embeds = self.backbone.embeddings.word_embeddings(full_code)
+        elif hasattr(self.backbone, 'shared'):
+            inputs_embeds = self.backbone.shared(full_code)
+        else:
+            inputs_embeds = self.backbone.get_input_embeddings()(full_code)
         combined_embeds = torch.cat([composite_prompt, inputs_embeds], dim=1)
         
         extended_attention_mask = torch.ones(attention_mask.size(0), prompt_length, 
@@ -137,7 +178,15 @@ class P3RHeadGateModel(nn.Module):
         combined_attention_mask = torch.cat([extended_attention_mask, full_code_attention], dim=1)
         
         outputs = self.backbone(inputs_embeds=combined_embeds, attention_mask=combined_attention_mask)
-        cls_embedding = outputs.last_hidden_state[:, 0, :]
+        
+        if hasattr(outputs, 'last_hidden_state'):
+            sequence_output = outputs.last_hidden_state
+        elif hasattr(outputs, 'hidden_states'):
+            sequence_output = outputs.hidden_states[-1]
+        else:
+            sequence_output = outputs[0]
+            
+        cls_embedding = sequence_output[:, 0, :]
         logits = self.classifier(cls_embedding)
         
         return logits
