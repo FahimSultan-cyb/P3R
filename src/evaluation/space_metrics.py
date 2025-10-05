@@ -428,7 +428,7 @@ class SpacecraftSimulator:
         
         return success
 
-    def export_nasa_results(metrics, mission_states, output_dir="results/nasa_analysis"):
+    def export_nasa_results(self,metrics, mission_states, output_dir="results/nasa_analysis"):
         os.makedirs(output_dir, exist_ok=True)
     
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -451,4 +451,5 @@ class SpacecraftSimulator:
             json.dump(report, f, indent=2)
     
         return output_dir
+
 
