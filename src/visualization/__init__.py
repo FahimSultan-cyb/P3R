@@ -1,3 +1,4 @@
-from .dashboard import create_ksp_dashboard
+from .dashboard import create_nasa_dashboard
 
-__all__ = ['create_ksp_dashboard']
+
+__all__ = ['create_nasa_dashboard']
