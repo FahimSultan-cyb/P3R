@@ -5,10 +5,9 @@ import os
 import sys
 import pandas as pd
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evaluation.space_metrics import NASAMetricsCalculator, SpacecraftSimulator, export_nasa_results
-from visualization.dashboard import create_nasa_dashboard
+from src.evaluation.space_metrics import NASAMetricsCalculator, SpacecraftSimulator, export_nasa_results
+from src.visualization.dashboard import create_nasa_dashboard
 
 def evaluate_with_nasa_metrics(model, test_loader, device, output_dir="results"):
     model.eval()
