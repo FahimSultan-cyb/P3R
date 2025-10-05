@@ -9,7 +9,7 @@ import sys
 from src.models.p3r_model import P3RHeadGateModel
 from src.data.dataset import CodeDataset
 from torch.utils.data import DataLoader
-from src.evaluation.space_metrics import NASAMetricsCalculator, SpacecraftSimulator, export_nasa_results
+from src.evaluation.space_metrics import NASAMetricsCalculator, SpacecraftSimulator
 
 def main():
     parser = argparse.ArgumentParser(description='NASA Software Validation Evaluation')
