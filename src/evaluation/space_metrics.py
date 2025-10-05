@@ -428,26 +428,27 @@ class SpacecraftSimulator:
         
         return success
 
-def export_nasa_results(metrics, mission_states, output_dir="results/nasa_analysis"):
-    os.makedirs(output_dir, exist_ok=True)
+    def export_nasa_results(metrics, mission_states, output_dir="results/nasa_analysis"):
+        os.makedirs(output_dir, exist_ok=True)
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    if mission_states:
-        df = pd.DataFrame(mission_states)
-        df.to_csv(f"{output_dir}/mission_timeline_{timestamp}.csv", index=False)
+        if mission_states:
+            df = pd.DataFrame(mission_states)
+            df.to_csv(f"{output_dir}/mission_timeline_{timestamp}.csv", index=False)
     
-    report = {
-        'detection_performance': metrics['detection_metrics'],
-        'vulnerability_analysis': metrics['vulnerability_counts'],
-        'nasa_mission_metrics': {
-            'risk_score': metrics['mission_risk_score'],
-            'assurance_level': metrics['software_assurance_level'],
-            'readiness_score': metrics['mission_readiness_score']
+        report = {
+            'detection_performance': metrics['detection_metrics'],
+            'vulnerability_analysis': metrics['vulnerability_counts'],
+            'nasa_mission_metrics': {
+                'risk_score': metrics['mission_risk_score'],
+                'assurance_level': metrics['software_assurance_level'],
+                'readiness_score': metrics['mission_readiness_score']
+            }
         }
-    }
     
-    with open(f"{output_dir}/nasa_report_{timestamp}.json", 'w') as f:
-        json.dump(report, f, indent=2)
+        with open(f"{output_dir}/nasa_report_{timestamp}.json", 'w') as f:
+            json.dump(report, f, indent=2)
     
-    return output_dir
+        return output_dir
+
