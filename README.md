@@ -39,17 +39,23 @@ os.chdir(root_path)
 
 ```
 
-
-## Visualization [Aero-space Metrics]
-```bash
-python scripts/visualize.py --data results/ksp_mission_data.csv --output outputs/visualizations/dashboard.png
-```
-
-
 ## Training 
 ```bash
 !python scripts/train.py --config configs/default.yaml --train_data data/sample/test.csv
 ```
+
+### Aero-Space Metrics
+
+```bash
+!python scripts/evaluate_nasa.py --model models/p3r_trained_model.pth --data data/sample/test.csv --output results/nasa_analysis
+```
+
+
+### Visualization [Aero-space Metrics]
+```bash
+python scripts/visualize.py --data results/mission_timeline_20251005_071451.csv --metrics data/nasa_report_20251005_071451.json --output outputs/visualizations/dashboard.png
+```
+
 
 
 ## Pre-trained Models
