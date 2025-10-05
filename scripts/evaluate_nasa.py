@@ -122,7 +122,8 @@ def main():
     metrics['mission_success_probability'] = mission_success
     
     print("\nExporting results...")
-    results_dir = export_nasa_results(metrics, mission_states, args.output)
+    k = SpacecraftSimulator()
+    results_dir = k.export_nasa_results(metrics, mission_states, args.output)
     
     print(f"\n{'='*70}")
     print("NASA SOFTWARE VALIDATION RESULTS")
