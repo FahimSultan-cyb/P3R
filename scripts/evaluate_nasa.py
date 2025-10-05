@@ -4,10 +4,10 @@ import argparse
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 
 from src.models.p3r_model import P3RHeadGateModel
-from src.training.dataset import CodeDataset
+from src.data.dataset import CodeDataset
 from torch.utils.data import DataLoader
 from src.evaluation.space_metrics import NASAMetricsCalculator, SpacecraftSimulator, export_nasa_results
 
@@ -20,10 +20,19 @@ def main():
     
     args = parser.parse_args()
     
-    device = torch.device("mps" if torch.backends.mps.is_available() else 
-                         "cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else 
+                         "mps" if torch.backends.mps.is_available() else "cpu")
     
     print(f"Using device: {device}")
+    
+    if not os.path.exists(args.model):
+        print(f"Error: Model file not found at {args.model}")
+        print("\nTo get a trained model, you need to:")
+        print("1. Train a model using: python src/training/train.py")
+        print("   OR")
+        print("2. Download pretrained model from your releases/checkpoints")
+        return
+    
     print(f"Loading model from: {args.model}")
     
     model = P3RHeadGateModel().to(device)
