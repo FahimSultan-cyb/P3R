@@ -59,6 +59,9 @@ python scripts/visualize.py --data results/mission_timeline_20251005_071451.csv 
 
 
 ## Pre-trained Models
+- Do run First the following script:
+
+!python scripts/download_models.py
 
 Download from Google Drive:
 - P3R Model: `models/p3r_headgate_model1.pth`
