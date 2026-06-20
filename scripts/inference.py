@@ -41,7 +41,8 @@ from src.models import P3RHeadGateModel
 from src.data.dataset import CodeDataset, create_collate_fn
 from src.evaluation.metrics import calculate_comprehensive_metrics, print_metrics_summary
 from src.evaluation.space_metrics import SpaceMissionEvaluator, KSPMissionSimulator
-from src.visualization.dashboard import create_ksp_dashboard
+# from src.visualization.dashboard import create_ksp_dashboard
+from src.visualization.dashboard import create_nasa_dashboard
 
 
 def main():
